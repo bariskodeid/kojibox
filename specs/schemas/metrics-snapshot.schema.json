@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Metrics Snapshot",
+  "type": "object",
+  "required": ["ts", "uptimeSec", "portsInUse", "cpuPercent", "memMB"],
+  "properties": {
+    "ts": {"type": "string", "format": "date-time"},
+    "uptimeSec": {"type": "number"},
+    "portsInUse": {"type": "array", "items": {"type": "number"}},
+    "cpuPercent": {"type": "number"},
+    "memMB": {"type": "number"}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Domain Mapping",
+  "type": "object",
+  "required": ["domain", "projectId", "targetPort"],
+  "properties": {
+    "domain": {"type": "string"},
+    "projectId": {"type": "string"},
+    "targetPort": {"type": "number"}
+  }
+}

@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (semver)"
+        required: true
+      channel:
+        description: "Release channel"
+        required: true
+        default: "stable"
+        type: choice
+        options:
+          - stable
+          - beta
+
+jobs:
+  build-and-sign:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_CHANNEL: ${{ inputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+      - run: pnpm install
+      - run: pnpm build
+      - name: Package
+        run: pnpm tauri build
+      - name: Sign Windows
+        if: runner.os == 'Windows'
+        run: |
+          echo "Sign Windows artifact"
+          # Example: signtool sign /f "$WIN_CERT_PATH" /p "$WIN_CERT_PASS" /tr "$WIN_TSA" /td sha256 /fd sha256 dist/kojibox.exe
+      - name: Sign macOS
+        if: runner.os == 'macOS'
+        run: |
+          echo "Sign and notarize macOS artifact"
+          # Example: codesign --sign "$MAC_CERT_ID" --options runtime "dist/kojibox.app"
+          # Example: xcrun notarytool submit --keychain-profile "$MAC_PROFILE" "dist/kojibox.dmg" --wait
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          if [ -d "src-tauri/target/release/bundle" ]; then
+            cp -R src-tauri/target/release/bundle/* dist/
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kojibox-${{ runner.os }}-${{ inputs.version }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build-and-sign
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Generate update feed
+        run: |
+          node scripts/generate-update-feed.js \
+            --version "${{ inputs.version }}" \
+            --channel "${{ inputs.channel }}" \
+            --dist "dist" \
+            --out "dist/feed.json" \
+            --sign-key "${{ secrets.UPDATE_SIGNING_KEY }}"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Kojibox v${{ inputs.version }}
+          draft: false
+          prerelease: ${{ inputs.channel == 'beta' }}
+          files: dist/**/*

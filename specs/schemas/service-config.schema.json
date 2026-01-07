@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Service Config",
+  "type": "object",
+  "required": ["id", "enabled", "ports", "env", "args"],
+  "properties": {
+    "id": {"type": "string"},
+    "enabled": {"type": "boolean"},
+    "ports": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "args": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

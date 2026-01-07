@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Service Definition",
+  "type": "object",
+  "required": ["id", "name", "binary", "args", "env", "cwd", "ports", "dependsOn", "healthCheck", "restartPolicy"],
+  "properties": {
+    "id": {"type": "string"},
+    "name": {"type": "string"},
+    "binary": {"type": "string"},
+    "args": {"type": "array", "items": {"type": "string"}},
+    "env": {"type": "object", "additionalProperties": {"type": "string"}},
+    "cwd": {"type": "string"},
+    "ports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "port", "protocol"],
+        "properties": {
+          "name": {"type": "string"},
+          "port": {"type": "number"},
+          "protocol": {"type": "string"}
+        }
+      }
+    },
+    "dependsOn": {"type": "array", "items": {"type": "string"}},
+    "healthCheck": {
+      "type": "object",
+      "required": ["type", "target", "timeoutMs", "intervalMs"],
+      "properties": {
+        "type": {"type": "string", "enum": ["pid", "port", "http"]},
+        "target": {"type": "string"},
+        "timeoutMs": {"type": "number"},
+        "intervalMs": {"type": "number"}
+      }
+    },
+    "restartPolicy": {
+      "type": "object",
+      "required": ["maxRetries", "backoffMs"],
+      "properties": {
+        "maxRetries": {"type": "number"},
+        "backoffMs": {"type": "number"}
+      }
+    }
+  }
+}

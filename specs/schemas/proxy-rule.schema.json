@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Proxy Rule",
+  "type": "object",
+  "required": ["host", "path", "target", "tls"],
+  "properties": {
+    "host": {"type": "string"},
+    "path": {"type": "string"},
+    "target": {"type": "string"},
+    "tls": {"type": "boolean"}
+  }
+}

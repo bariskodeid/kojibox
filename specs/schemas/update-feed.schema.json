@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Update Feed",
+  "type": "object",
+  "required": ["version", "pubDate", "notes", "platforms", "signature"],
+  "properties": {
+    "version": {"type": "string"},
+    "pubDate": {"type": "string", "format": "date-time"},
+    "notes": {"type": "string"},
+    "signature": {"type": "string"},
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["os", "arch", "url", "checksum"],
+        "properties": {
+          "os": {"type": "string", "enum": ["windows", "macos", "linux"]},
+          "arch": {"type": "string"},
+          "url": {"type": "string"},
+          "checksum": {"type": "string"}
+        }
+      }
+    }
+  }
+}

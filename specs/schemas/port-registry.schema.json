@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kojibox Port Registry",
+  "type": "object",
+  "required": ["assigned", "ranges"],
+  "properties": {
+    "assigned": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "ranges": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": {"type": "number"},
+          "to": {"type": "number"}
+        }
+      }
+    }
+  }
+}

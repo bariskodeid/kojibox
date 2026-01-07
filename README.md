@@ -141,3 +141,18 @@ Rencana proyek lengkap tersimpan di `plan.md`, dan spesifikasi teknis per modul 
 - Tambah mapping interface antar modul, error taxonomy, dan desain data persistence di `specs/`.
 - Tambah desain deployment/release pipeline di `specs/deployment.md`.
 - Tambah CI/CD workflow, update feed config, dan signing key management.
+- Tambah signing feed, generator feed, dan dokumen secrets CI di `docs/ci-secrets.md`.
+- Tambah panduan key Ed25519 dan validasi signature di `specs/signature-validation.md`.
+- Tambah contoh implementasi verifikasi signature dan schema JSON di `specs/schemas/`.
+- Tambah schema untuk service definition/state, log entry, dan metrics snapshot.
+- Tambah schema diagnostics, domain/proxy, dan panduan validasi schema di `specs/schema-validation.md`.
+- Tambah schema secret/port registry dan mapping error validasi di `specs/validation-errors.md`.
+- Tambah index schema validation dan panduan UI error remediation di `specs/ui-error-remediation.md`.
+- Tambah remediation mapping di `specs/interfaces.md` dan checklist error UI di `specs/ui-error-checklist.md`.
+- Tambah panduan i18n dan flowchart penanganan error di `specs/i18n-guidelines.md` dan `specs/error-flowcharts.md`.
+- Tambah panduan i18n UI umum dan dokumen telemetry opt-in di `specs/i18n-ui-guidelines.md` dan `specs/telemetry.md`.
+- Tambah kebijakan data retention untuk telemetry/log di `specs/data-retention.md`.
+- Tambah schema dan contoh payload telemetry di `specs/telemetry-events.md`.
+- Tambah allowlist event telemetry, kebijakan upload, dan schema batch telemetry.
+- Tambah detail upload response, mapping telemetry interface, dan note allowlist event.
+- Sinkronkan status plan ke `plan.md`.
