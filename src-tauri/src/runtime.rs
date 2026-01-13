@@ -1,12 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::PortDef;
 use crate::installer;
+use flate2::read::GzDecoder;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
+use tar::Archive;
+use xz2::read::XzDecoder;
 use zip::ZipArchive;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +50,29 @@ pub struct RuntimeDownloadStatus {
     pub progress: f32,
     pub service: Option<String>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeSources {
+    #[serde(rename = "manifestUrl")]
+    pub manifest_url: Option<String>,
+    #[serde(rename = "manifestChecksum")]
+    pub manifest_checksum: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct OfficialSource {
+    url: String,
+    archive: ArchiveKind,
+    binary_names: Vec<String>,
+    target_binary: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ArchiveKind {
+    Zip,
+    TarGz,
+    TarXz,
 }
 
 static DOWNLOAD_STATUS: Lazy<Mutex<RuntimeDownloadStatus>> = Lazy::new(|| {
@@ -94,6 +121,39 @@ impl RuntimeManager {
 
     pub fn manifest_path(&self) -> PathBuf {
         self.root.join("runtime/manifest.json")
+    }
+
+    pub fn sources_path(&self) -> PathBuf {
+        self.root.join("runtime/sources.json")
+    }
+
+    pub fn load_sources(&self) -> Result<RuntimeSources, String> {
+        let path = self.sources_path();
+        if !path.exists() {
+            return Ok(RuntimeSources {
+                manifest_url: None,
+                manifest_checksum: None,
+            });
+        }
+        let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&raw).map_err(|e| e.to_string())
+    }
+
+    pub fn write_sources(&self, mut sources: RuntimeSources) -> Result<(), String> {
+        sources.manifest_url = normalize_optional(sources.manifest_url);
+        sources.manifest_checksum = normalize_optional(sources.manifest_checksum);
+        let path = self.sources_path();
+        if sources.manifest_url.is_none() && sources.manifest_checksum.is_none() {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+            return Ok(());
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let raw = serde_json::to_string_pretty(&sources).map_err(|e| e.to_string())?;
+        std::fs::write(path, raw).map_err(|e| e.to_string())
     }
 
     pub fn scoped_path(&self, binary_path: &Path) -> String {
@@ -182,6 +242,9 @@ impl RuntimeManager {
                 set_download_status("extracting", 0.6, Some(name.to_string()), None);
                 extract_zip(&cache_archive, &self.root)?;
             }
+        } else {
+            set_download_status("downloading", 0.2, Some(name.to_string()), None);
+            install_official_runtime(self, name, version, &os, &arch)?;
         }
 
         if bin_path.exists() {
@@ -203,27 +266,25 @@ impl RuntimeManager {
             Ok(value) if !value.trim().is_empty() => value,
             // Check sources.json
             _ => {
-                let sources_path = self.root.join("runtime/sources.json");
-                if sources_path.exists() {
-                    if let Ok(raw) = std::fs::read_to_string(&sources_path) {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
-                            if let Some(url) = json.get("manifestUrl").and_then(|s| s.as_str()) {
-                                url.to_string()
-                            } else {
-                                return self.ensure_manifest();
-                            }
-                        } else {
-                            return self.ensure_manifest();
-                        }
-                    } else {
-                        return self.ensure_manifest();
-                    }
+                let sources = self.load_sources().unwrap_or(RuntimeSources {
+                    manifest_url: None,
+                    manifest_checksum: None,
+                });
+                if let Some(url) = sources.manifest_url {
+                    url
                 } else {
                     return self.ensure_manifest();
                 }
             }
         };
-        let checksum = std::env::var("KOJIBOX_RUNTIME_MANIFEST_CHECKSUM").unwrap_or_default();
+        let checksum = match std::env::var("KOJIBOX_RUNTIME_MANIFEST_CHECKSUM") {
+            Ok(value) if !value.trim().is_empty() => value,
+            _ => self
+                .load_sources()
+                .ok()
+                .and_then(|sources| sources.manifest_checksum)
+                .unwrap_or_default(),
+        };
         let cache_path = self.root.join("runtime/cache/manifest.json");
         installer::download_with_resume(&url, &cache_path, &checksum)?;
         let raw = std::fs::read_to_string(&cache_path).map_err(|e| e.to_string())?;
@@ -463,4 +524,336 @@ fn ensure_executable(path: &PathBuf) -> Result<(), String> {
         std::fs::set_permissions(path, perm).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+fn install_official_runtime(
+    manager: &RuntimeManager,
+    name: &str,
+    version: &str,
+    os: &str,
+    arch: &str,
+) -> Result<(), String> {
+    let source = official_source_for(name, version, os, arch)
+        .ok_or_else(|| "official runtime source not available".to_string())?;
+    let archive_ext = archive_extension(source.archive);
+    let cache_root = manager.root.join("runtime/cache/official");
+    fs::create_dir_all(&cache_root).map_err(|e| e.to_string())?;
+    let cache_archive = cache_root.join(format!(
+        "{name}-{version}-{os}-{arch}.{archive_ext}"
+    ));
+    installer::download_with_resume(&source.url, &cache_archive, "")?;
+
+    let staging = cache_root.join(format!("{name}-{version}-{os}-{arch}"));
+    if staging.exists() {
+        fs::remove_dir_all(&staging).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+
+    set_download_status("extracting", 0.6, Some(name.to_string()), None);
+    extract_archive(&cache_archive, &staging, source.archive)?;
+
+    set_download_status("installing", 0.8, Some(name.to_string()), None);
+    let binary_path = find_binary_path(&staging, &source.binary_names)?;
+    let bin_dir = binary_path
+        .parent()
+        .ok_or_else(|| "binary missing parent dir".to_string())?;
+    let prefix_dir = match bin_dir.parent() {
+        Some(parent) if parent.starts_with(&staging) && parent != staging => parent.to_path_buf(),
+        _ => bin_dir.to_path_buf(),
+    };
+    let target_dir = manager
+        .root
+        .join("runtime/bin")
+        .join(name)
+        .join(version)
+        .join(format!("{os}-{arch}"));
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    copy_dir_contents(&prefix_dir, &target_dir)?;
+
+    let target_bin = target_dir.join(&source.target_binary);
+    if !target_bin.exists() {
+        let relative = binary_path
+            .strip_prefix(&prefix_dir)
+            .unwrap_or(&binary_path);
+        let candidate = target_dir.join(relative);
+        if candidate.exists() {
+            fs::copy(&candidate, &target_bin).map_err(|e| e.to_string())?;
+        }
+    }
+    ensure_executable_recursive(&target_dir)?;
+    Ok(())
+}
+
+fn archive_extension(kind: ArchiveKind) -> &'static str {
+    match kind {
+        ArchiveKind::Zip => "zip",
+        ArchiveKind::TarGz => "tar.gz",
+        ArchiveKind::TarXz => "tar.xz",
+    }
+}
+
+fn official_source_for(
+    name: &str,
+    version: &str,
+    os: &str,
+    arch: &str,
+) -> Option<OfficialSource> {
+    let target_binary = if os == "windows" {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    match name {
+        "node" => {
+            let platform = match os {
+                "windows" => "win",
+                "macos" => "darwin",
+                "linux" => "linux",
+                _ => return None,
+            };
+            let arch = match arch {
+                "x64" => "x64",
+                "arm64" => "arm64",
+                _ => return None,
+            };
+            let archive = if os == "windows" {
+                ArchiveKind::Zip
+            } else {
+                ArchiveKind::TarXz
+            };
+            let ext = archive_extension(archive);
+            Some(OfficialSource {
+                url: format!(
+                    "https://nodejs.org/dist/v{version}/node-v{version}-{platform}-{arch}.{ext}"
+                ),
+                archive,
+                binary_names: vec![target_binary.clone()],
+                target_binary,
+            })
+        }
+        "mailpit" => {
+            let platform = match os {
+                "windows" => "windows",
+                "macos" => "darwin",
+                "linux" => "linux",
+                _ => return None,
+            };
+            let arch = match arch {
+                "x64" => "amd64",
+                "arm64" => "arm64",
+                _ => return None,
+            };
+            let archive = if os == "windows" {
+                ArchiveKind::Zip
+            } else {
+                ArchiveKind::TarGz
+            };
+            let ext = archive_extension(archive);
+            Some(OfficialSource {
+                url: format!(
+                    "https://github.com/axllent/mailpit/releases/download/v{version}/mailpit-{platform}-{arch}.{ext}"
+                ),
+                archive,
+                binary_names: vec![target_binary.clone()],
+                target_binary,
+            })
+        }
+        "php" => {
+            if os != "windows" || arch != "x64" {
+                return None;
+            }
+            Some(OfficialSource {
+                url: format!(
+                    "https://windows.php.net/downloads/releases/php-{version}-Win32-vs16-x64.zip"
+                ),
+                archive: ArchiveKind::Zip,
+                binary_names: vec![target_binary.clone()],
+                target_binary,
+            })
+        }
+        "postgres" => {
+            let (platform, archive) = match os {
+                "windows" => ("windows-x64", ArchiveKind::Zip),
+                "linux" => ("linux-x64", ArchiveKind::TarGz),
+                "macos" => ("osx", ArchiveKind::Zip),
+                _ => return None,
+            };
+            if arch != "x64" {
+                return None;
+            }
+            let ext = archive_extension(archive);
+            Some(OfficialSource {
+                url: format!(
+                    "https://get.enterprisedb.com/postgresql/postgresql-{version}-{platform}-binaries.{ext}"
+                ),
+                archive,
+                binary_names: vec![target_binary.clone()],
+                target_binary,
+            })
+        }
+        "mariadb" => {
+            let (platform, archive) = match os {
+                "windows" => ("winx64", ArchiveKind::Zip),
+                "linux" => ("linux-x86_64", ArchiveKind::TarGz),
+                "macos" => ("macosx", ArchiveKind::TarGz),
+                _ => return None,
+            };
+            if arch != "x64" {
+                return None;
+            }
+            let ext = archive_extension(archive);
+            Some(OfficialSource {
+                url: format!(
+                    "https://archive.mariadb.org/mariadb-{version}/{platform}/mariadb-{version}-{platform}.{ext}"
+                ),
+                archive,
+                binary_names: vec![
+                    target_binary.clone(),
+                    if os == "windows" {
+                        "mariadbd.exe".to_string()
+                    } else {
+                        "mariadbd".to_string()
+                    },
+                    if os == "windows" {
+                        "mysqld.exe".to_string()
+                    } else {
+                        "mysqld".to_string()
+                    },
+                ],
+                target_binary,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn extract_archive(archive: &PathBuf, dest: &PathBuf, kind: ArchiveKind) -> Result<(), String> {
+    match kind {
+        ArchiveKind::Zip => extract_zip_to(archive, dest),
+        ArchiveKind::TarGz => extract_tar_gz(archive, dest),
+        ArchiveKind::TarXz => extract_tar_xz(archive, dest),
+    }
+}
+
+fn extract_zip_to(archive: &PathBuf, dest: &PathBuf) -> Result<(), String> {
+    let file = fs::File::open(archive).map_err(|e| e.to_string())?;
+    let mut zip = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
+        let name = entry.name().to_string();
+        if name.contains("..") {
+            return Err("invalid archive entry".to_string());
+        }
+        let out_path = dest.join(&name);
+        if entry.is_dir() {
+            fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(parent) = out_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut outfile = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+            std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn extract_tar_gz(archive: &PathBuf, dest: &PathBuf) -> Result<(), String> {
+    let file = fs::File::open(archive).map_err(|e| e.to_string())?;
+    let decoder = GzDecoder::new(file);
+    extract_tar(decoder, dest)
+}
+
+fn extract_tar_xz(archive: &PathBuf, dest: &PathBuf) -> Result<(), String> {
+    let file = fs::File::open(archive).map_err(|e| e.to_string())?;
+    let decoder = XzDecoder::new(file);
+    extract_tar(decoder, dest)
+}
+
+fn extract_tar<R: std::io::Read>(reader: R, dest: &PathBuf) -> Result<(), String> {
+    let mut archive = Archive::new(reader);
+    let entries = archive.entries().map_err(|e| e.to_string())?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path().map_err(|e| e.to_string())?;
+        if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            return Err("invalid archive entry".to_string());
+        }
+        let out_path = dest.join(&*path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        entry.unpack(&out_path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn find_binary_path(root: &PathBuf, names: &[String]) -> Result<PathBuf, String> {
+    let mut stack = vec![root.clone()];
+    while let Some(path) = stack.pop() {
+        let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if names.iter().any(|name| name == file_name) {
+                    return Ok(path);
+                }
+            }
+        }
+    }
+    Err("binary not found in archive".to_string())
+}
+
+fn copy_dir_contents(src: &PathBuf, dest: &PathBuf) -> Result<(), String> {
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let target = dest.join(entry.file_name());
+        if path.is_dir() {
+            fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+            copy_dir_contents(&path, &target)?;
+        } else {
+            fs::copy(&path, &target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_executable_recursive(path: &PathBuf) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut stack = vec![path.clone()];
+        while let Some(dir) = stack.pop() {
+            for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    let mut perm = fs::metadata(&path)
+                        .map_err(|e| e.to_string())?
+                        .permissions();
+                    perm.set_mode(0o755);
+                    fs::set_permissions(&path, perm).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|v| {
+        let trimmed = v.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
 }

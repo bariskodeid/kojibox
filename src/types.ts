@@ -105,3 +105,8 @@ export type RuntimeDownloadStatus = {
   service: string | null;
   error: string | null;
 };
+
+export type RuntimeSources = {
+  manifestUrl: string | null;
+  manifestChecksum: string | null;
+};

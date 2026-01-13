@@ -420,6 +420,42 @@ fn runtime_get_manifest(_state: State<'_, AppState>) -> Result<runtime::RuntimeM
 }
 
 #[tauri::command]
+fn runtime_get_manifest_raw(_state: State<'_, AppState>) -> Result<String, String> {
+    let runtime = runtime::RuntimeManager::new(".");
+    let path = runtime.manifest_path();
+    if !path.exists() {
+        let _ = runtime.ensure_manifest()?;
+    }
+    std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn runtime_save_manifest_raw(_state: State<'_, AppState>, raw: String) -> Result<runtime::RuntimeManifest, String> {
+    let runtime = runtime::RuntimeManager::new(".");
+    let manifest: runtime::RuntimeManifest = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if manifest.version.trim().is_empty() {
+        return Err("manifest version is required".to_string());
+    }
+    runtime.write_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+#[tauri::command]
+fn runtime_get_sources(_state: State<'_, AppState>) -> Result<runtime::RuntimeSources, String> {
+    let runtime = runtime::RuntimeManager::new(".");
+    runtime.load_sources()
+}
+
+#[tauri::command]
+fn runtime_save_sources(
+    _state: State<'_, AppState>,
+    sources: runtime::RuntimeSources,
+) -> Result<(), String> {
+    let runtime = runtime::RuntimeManager::new(".");
+    runtime.write_sources(sources)
+}
+
+#[tauri::command]
 fn runtime_ensure_service(
     _state: State<'_, AppState>,
     name: String,
@@ -725,6 +761,10 @@ pub fn run() {
             diagnostics_create,
             metrics_snapshot,
             runtime_get_manifest,
+            runtime_get_manifest_raw,
+            runtime_save_manifest_raw,
+            runtime_get_sources,
+            runtime_save_sources,
             runtime_ensure_service,
             runtime_refresh_manifest,
             runtime_download_status,

@@ -46,6 +46,7 @@ impl Updater {
         })
     }
 
+    #[allow(dead_code)]
     pub fn apply(&self, progress: Arc<Mutex<UpdateProgress>>) {
         std::thread::spawn(move || {
             {

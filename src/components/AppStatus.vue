@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import type { 
     InstallerStatus, 
     MetricsSnapshot, 
     RuntimeManifest, 
-    RuntimeDownloadStatus 
+    RuntimeDownloadStatus,
+    RuntimeSources
 } from "../types";
 
 const props = defineProps<{
@@ -29,9 +30,25 @@ const emit = defineEmits<{
 }>();
 
 const availableVersions = ref<string[]>([]);
+const runtimeSources = ref<RuntimeSources>({
+    manifestUrl: "",
+    manifestChecksum: "",
+});
+const runtimeSourcesError = ref<string | null>(null);
+const runtimeSourcesSaved = ref<string | null>(null);
+const manifestRaw = ref("");
+const manifestError = ref<string | null>(null);
+const manifestSaved = ref<string | null>(null);
+const manifestOpen = ref(false);
 
 watch(() => props.runtimeService, async (newService) => {
     if (newService) {
+        const manifestVersion = props.runtimeManifest?.services.find(
+            (entry) => entry.name === newService
+        )?.version;
+        if (manifestVersion && manifestVersion !== props.runtimeVersion) {
+            emit("update:runtimeVersion", manifestVersion);
+        }
         try {
             const versions: string[] = await invoke("runtime_list_versions", { service: newService });
             availableVersions.value = versions;
@@ -42,12 +59,79 @@ watch(() => props.runtimeService, async (newService) => {
     }
 }, { immediate: true });
 
+watch(runtimeSources, () => {
+    runtimeSourcesError.value = null;
+    runtimeSourcesSaved.value = null;
+}, { deep: true });
+
+watch(manifestRaw, () => {
+    manifestError.value = null;
+    manifestSaved.value = null;
+});
+
+onMounted(async () => {
+    await loadRuntimeSources();
+    await loadManifestRaw();
+});
+
 function isUpdateRunning() {
   return !!(props.updateProgress && props.updateProgress.phase !== "idle" && props.updateProgress.phase !== "complete");
 }
 
 function onEnsureRuntime() {
     emit("ensure-runtime", props.runtimeService, props.runtimeVersion);
+}
+
+async function loadRuntimeSources() {
+    try {
+        const sources: RuntimeSources = await invoke("runtime_get_sources");
+        runtimeSources.value = {
+            manifestUrl: sources.manifestUrl ?? "",
+            manifestChecksum: sources.manifestChecksum ?? "",
+        };
+        runtimeSourcesError.value = null;
+    } catch (e) {
+        runtimeSourcesError.value = errorMessage(e);
+    }
+}
+
+async function saveRuntimeSources() {
+    try {
+        await invoke("runtime_save_sources", { sources: runtimeSources.value });
+        runtimeSourcesSaved.value = "saved";
+        runtimeSourcesError.value = null;
+    } catch (e) {
+        runtimeSourcesError.value = errorMessage(e);
+    }
+}
+
+async function loadManifestRaw() {
+    try {
+        manifestRaw.value = await invoke("runtime_get_manifest_raw");
+        manifestError.value = null;
+    } catch (e) {
+        manifestError.value = errorMessage(e);
+    }
+}
+
+async function saveManifestRaw() {
+    try {
+        await invoke("runtime_save_manifest_raw", { raw: manifestRaw.value });
+        manifestSaved.value = "saved";
+        manifestError.value = null;
+    } catch (e) {
+        manifestError.value = errorMessage(e);
+    }
+}
+
+function errorMessage(error: unknown) {
+    if (typeof error === "string") {
+        return error;
+    }
+    if (error && typeof error === "object" && "message" in error) {
+        return String((error as { message: string }).message);
+    }
+    return "unexpected error";
 }
 
 </script>
@@ -98,6 +182,49 @@ function onEnsureRuntime() {
           <div class="h-full bg-[var(--accent-color)] transition-all duration-200" :style="{ width: `${runtimeDownloadStatus.progress * 100}%` }"></div>
         </div>
         <p v-if="runtimeDownloadStatus.error" class="text-[var(--error-color)] text-xs font-mono mt-1">> ERROR: {{ runtimeDownloadStatus.error }}</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">Runtime Manifest</h3>
+          <span class="tech-label">RT_MANIFEST</span>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="grid grid-cols-1 gap-3">
+          <div>
+              <span class="tech-label mb-1">MANIFEST_URL</span>
+              <input v-model="runtimeSources.manifestUrl" class="input font-mono text-xs" placeholder="https://example.com/manifest.json" />
+          </div>
+          <div>
+              <span class="tech-label mb-1">MANIFEST_CHECKSUM</span>
+              <input v-model="runtimeSources.manifestChecksum" class="input font-mono text-xs" placeholder="sha256:..." />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+            <button class="btn" @click="saveRuntimeSources">Save Sources</button>
+        </div>
+        <p v-if="runtimeSourcesError" class="error font-mono text-xs">{{ runtimeSourcesError }}</p>
+        <p v-if="runtimeSourcesSaved" class="text-xs font-mono text-[var(--success-color)]">> sources saved</p>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-[var(--border-color)] border-dashed">
+        <div class="flex justify-between items-center mb-2">
+          <span class="tech-label">MANIFEST_JSON</span>
+          <button class="btn btn-sm" @click="manifestOpen = !manifestOpen">
+            {{ manifestOpen ? "Hide" : "Edit" }}
+          </button>
+        </div>
+        <div v-if="manifestOpen" class="grid grid-cols-1 gap-2">
+          <textarea v-model="manifestRaw" class="input font-mono text-xs h-40" spellcheck="false"></textarea>
+          <div class="flex justify-end gap-2">
+            <button class="btn btn-sm" @click="loadManifestRaw">Reload</button>
+            <button class="btn btn-sm btn-primary" @click="saveManifestRaw">Save Manifest</button>
+          </div>
+          <p v-if="manifestError" class="error font-mono text-xs">{{ manifestError }}</p>
+          <p v-if="manifestSaved" class="text-xs font-mono text-[var(--success-color)]">> manifest saved</p>
+        </div>
       </div>
     </section>
 

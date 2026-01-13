@@ -54,6 +54,7 @@ pub fn track_event(event_name: &str, payload: serde_json::Value) {
     }
 }
 
+#[allow(dead_code)]
 pub fn flush() {
     let mut state = STATE.lock().unwrap();
     flush_internal(&mut state);
