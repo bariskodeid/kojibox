@@ -1,5 +1,6 @@
 use crate::config_store::ServiceConfig;
 use crate::models::{LogEntry, ServiceDefinition, ServiceState};
+use crate::runtime;
 use crate::runtime::RuntimeManager;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
@@ -10,11 +11,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[derive(Debug)]
 pub struct ServiceManager {
     runtime: RuntimeManager,
     definitions: Vec<ServiceDefinition>,
     states: HashMap<String, ServiceState>,
     processes: HashMap<String, Child>,
+    restart_attempts: HashMap<String, u32>,
     logs: Arc<Mutex<HashMap<String, Vec<LogEntry>>>>,
     log_root: PathBuf,
     log_limit: usize,
@@ -33,6 +36,7 @@ impl ServiceManager {
             definitions,
             states: HashMap::new(),
             processes: HashMap::new(),
+            restart_attempts: HashMap::new(),
             logs: Arc::new(Mutex::new(HashMap::new())),
             log_root,
             log_limit: 2000,
@@ -79,6 +83,26 @@ impl ServiceManager {
     ) -> Result<ServiceState, String> {
         let _ = self.stop(id);
         self.start_with_config(id, config)
+    }
+
+    pub fn apply_config_no_restart(
+        &mut self,
+        id: &str,
+        _config: ServiceConfig,
+    ) -> Result<ServiceState, String> {
+        let state = self
+            .states
+            .get(id)
+            .cloned()
+            .unwrap_or(ServiceState {
+                id: id.to_string(),
+                state: "stopped".to_string(),
+                pid: None,
+                last_error: None,
+                last_updated: now_ts(),
+            });
+        self.push_log(id, "info", "applied config without restart");
+        Ok(state)
     }
 
     fn start_with_dependencies(
@@ -134,16 +158,38 @@ impl ServiceManager {
             for arg in config.args {
                 def.args.push(arg);
             }
+            // Override binary if version is specified
+            if let Some(ver) = &config.version {
+                if !ver.is_empty() {
+                    let new_bin_path = runtime::bin_path_for(&def.id, ver);
+                    // Check if it exists, otherwise fallback or fail?
+                    // We assume it exists if user selected it.
+                    // But we need to resolve it relative to root.
+                    // Since runtime.resolve_binary does lookup, we just need to pass the relative path string
+                    // But wait, resolve_binary expects configured binary path from definition.
+                    // We should update def.binary.
+                    def.binary = new_bin_path;
+                }
+            }
             self.push_log(&def.id, "info", "applied service config");
         }
 
         let binary = match self.runtime.resolve_binary(&def.binary) {
             Ok(path) => path,
             Err(err) => {
-                visiting.remove(id);
-                return Err(err);
+                if let Some(version) = runtime::default_versions().get(&def.id).cloned() {
+                    let _ = self.runtime.ensure_service(&def.id, &version);
+                }
+                match self.runtime.resolve_binary(&def.binary) {
+                    Ok(path) => path,
+                    Err(_) => {
+                        visiting.remove(id);
+                        return Err(err);
+                    }
+                }
             }
         };
+        self.ensure_service_data(&def, &binary);
         let starting = ServiceState {
             id: def.id.clone(),
             state: "starting".to_string(),
@@ -152,13 +198,15 @@ impl ServiceManager {
             last_updated: now_ts(),
         };
         self.states.insert(def.id.clone(), starting);
-        let mut cmd = Command::new(binary);
+        let mut cmd = Command::new(&binary);
         cmd.args(&def.args)
             .current_dir(&def.cwd)
             .envs(&def.env)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        let path_value = self.runtime.scoped_path(&binary);
+        cmd.env("PATH", path_value);
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
@@ -184,6 +232,9 @@ impl ServiceManager {
             last_updated: now_ts(),
         };
         self.states.insert(def.id.clone(), state.clone());
+        if state.state == "running" {
+            self.restart_attempts.insert(def.id.clone(), 0);
+        }
         self.push_log(&def.id, "info", "service started");
         visiting.remove(id);
         Ok(state)
@@ -210,6 +261,16 @@ impl ServiceManager {
     }
 
     pub fn restart(&mut self, id: &str) -> Result<ServiceState, String> {
+        self.states.insert(
+            id.to_string(),
+            ServiceState {
+                id: id.to_string(),
+                state: "restarting".to_string(),
+                pid: None,
+                last_error: None,
+                last_updated: now_ts(),
+            },
+        );
         let _ = self.stop(id);
         self.start(id)
     }
@@ -240,6 +301,82 @@ impl ServiceManager {
 
     pub fn snapshot_logs(&self) -> HashMap<String, Vec<LogEntry>> {
         self.logs.lock().expect("logs lock").clone()
+    }
+
+    pub fn export_logs(
+        &self,
+        service: Option<&str>,
+        level: Option<&str>,
+        limit: usize,
+    ) -> Result<String, String> {
+        let logs = self.snapshot_logs();
+        let mut entries = Vec::new();
+        for (id, items) in logs {
+            if let Some(filter) = service {
+                if filter != id {
+                    continue;
+                }
+            }
+            for entry in items {
+                if let Some(level_filter) = level {
+                    if entry.level != level_filter {
+                        continue;
+                    }
+                }
+                entries.push(entry);
+            }
+        }
+        entries.sort_by(|a, b| a.ts.cmp(&b.ts));
+        let cap = if limit == 0 { 200 } else { limit };
+        let slice = if entries.len() > cap {
+            entries[entries.len() - cap..].to_vec()
+        } else {
+            entries
+        };
+
+        let export_dir = self
+            .log_root
+            .parent()
+            .unwrap_or(&self.log_root)
+            .join("exports");
+        std::fs::create_dir_all(&export_dir).map_err(|e| e.to_string())?;
+        let service_tag = service.unwrap_or("all");
+        let level_tag = level.unwrap_or("all");
+        let filename = format!("{service_tag}-{level_tag}-{}.log", now_ts());
+        let path = export_dir.join(filename);
+        let mut content = String::new();
+        for entry in slice {
+            content.push_str(&format!(
+                "{} [{}] {} {}\n",
+                entry.ts, entry.level, entry.service, entry.message
+            ));
+        }
+        std::fs::write(&path, content).map_err(|e| e.to_string())?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    pub fn clear_logs(&self, service_id: Option<&str>) -> Result<(), String> {
+        let mut logs = self.logs.lock().expect("logs lock");
+        if let Some(id) = service_id {
+            if let Some(buffer) = logs.get_mut(id) {
+                buffer.clear();
+            }
+            let path = self.log_root.join(format!("{id}.log"));
+            if path.exists() {
+                std::fs::write(&path, "").map_err(|e| e.to_string())?;
+            }
+        } else {
+            logs.clear();
+            if let Ok(entries) = std::fs::read_dir(&self.log_root) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |e| e == "log") {
+                        let _ = std::fs::write(&path, "");
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn push_log(&self, id: &str, level: &str, message: &str) {
@@ -283,6 +420,64 @@ impl ServiceManager {
                     push_log_shared(&logs, &log_root, &id, "error", &line, 2000);
                 }
             });
+        }
+    }
+
+    fn ensure_service_data(&self, def: &ServiceDefinition, binary: &PathBuf) {
+        if def.id == "postgres" {
+            let data_dir = def
+                .env
+                .get("PGDATA")
+                .cloned()
+                .unwrap_or_else(|| "runtime/data/postgres".to_string());
+            let data_path = PathBuf::from(&data_dir);
+            let _ = std::fs::create_dir_all(&data_path);
+            let marker = data_path.join("PG_VERSION");
+            if marker.exists() {
+                return;
+            }
+            let initdb = binary
+                .parent()
+                .map(|parent| parent.join(if cfg!(target_os = "windows") { "initdb.exe" } else { "initdb" }))
+                .unwrap_or_else(|| PathBuf::from("initdb"));
+            if initdb.exists() {
+                let _ = Command::new(initdb)
+                    .arg("-D")
+                    .arg(&data_dir)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            } else {
+                self.push_log(&def.id, "error", "initdb not found for postgres");
+            }
+        }
+        if def.id == "mariadb" {
+            let data_dir = "runtime/data/mariadb".to_string();
+            let data_path = PathBuf::from(&data_dir);
+            let _ = std::fs::create_dir_all(&data_path);
+            let marker = data_path.join("mysql");
+            if marker.exists() {
+                return;
+            }
+            let installer = binary
+                .parent()
+                .map(|parent| {
+                    parent.join(if cfg!(target_os = "windows") {
+                        "mariadb-install-db.exe"
+                    } else {
+                        "mariadb-install-db"
+                    })
+                })
+                .unwrap_or_else(|| PathBuf::from("mariadb-install-db"));
+            if installer.exists() {
+                let _ = Command::new(installer)
+                    .arg(format!("--datadir={data_dir}"))
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            } else {
+                self.push_log(&def.id, "error", "mariadb-install-db not found");
+            }
         }
     }
 
@@ -399,6 +594,19 @@ impl ServiceManager {
                 );
                 let level = if success { "info" } else { "error" };
                 self.push_log(&id, level, "process exited");
+                if !success {
+                    if let Some(def) = self.definitions.iter().find(|d| d.id == id) {
+                        let attempt = self.restart_attempts.entry(id.clone()).or_insert(0);
+                        if *attempt < def.restart_policy.max_retries {
+                            *attempt += 1;
+                            self.push_log(&id, "info", "restarting after crash");
+                            std::thread::sleep(Duration::from_millis(def.restart_policy.backoff_ms));
+                            let _ = self.start(&id);
+                        }
+                    }
+                } else {
+                    self.restart_attempts.insert(id.clone(), 0);
+                }
             }
         }
     }

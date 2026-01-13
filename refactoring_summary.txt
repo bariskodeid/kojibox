@@ -1,0 +1,5 @@
+Refactoring UI selesai.
+- `src/App.vue` dipecah menjadi 9 komponen di `src/components/`.
+- Bug input overwriting di `ServiceSettings` diperbaiki.
+- Build sukses.
+- `plan.md` diperbarui.

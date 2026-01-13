@@ -1,0 +1,6 @@
+Implementation of pending items complete:
+1. Fixed Proxy TLS compilation issues (adapted to rustls 0.23/tokio-rustls 0.26).
+2. Added structure for real binary downloads in prepare-runtime.cjs.
+3. Implemented OS-level port availability check.
+4. Implemented auto-restart prompt for PHP extensions.
+5. Added database client launcher links.

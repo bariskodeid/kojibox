@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "postgres",
+  "enabled": true,
+  "version": null,
+  "ports": {
+    "main": 5432
+  },
+  "env": {},
+  "args": []
+}

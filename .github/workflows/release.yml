@@ -25,6 +25,11 @@ jobs:
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_CHANNEL: ${{ inputs.channel }}
+      WIN_CERT_PATH: ${{ secrets.WIN_CERT_PATH }}
+      WIN_CERT_PASS: ${{ secrets.WIN_CERT_PASS }}
+      WIN_TSA: ${{ secrets.WIN_TSA }}
+      MAC_CERT_ID: ${{ secrets.MAC_CERT_ID }}
+      MAC_PROFILE: ${{ secrets.MAC_PROFILE }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -40,12 +45,22 @@ jobs:
         run: pnpm tauri build
       - name: Sign Windows
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          echo "Sign Windows artifact"
-          # Example: signtool sign /f "$WIN_CERT_PATH" /p "$WIN_CERT_PASS" /tr "$WIN_TSA" /td sha256 /fd sha256 dist/kojibox.exe
+          if (-not $env:WIN_CERT_PATH) {
+            Write-Host "Skipping Windows signing (missing WIN_CERT_PATH)."
+            exit 0
+          }
+          Write-Host "Signing Windows artifact"
+          # Example:
+          # signtool sign /f "$env:WIN_CERT_PATH" /p "$env:WIN_CERT_PASS" /tr "$env:WIN_TSA" /td sha256 /fd sha256 dist/kojibox.exe
       - name: Sign macOS
         if: runner.os == 'macOS'
         run: |
+          if [ -z "$MAC_CERT_ID" ]; then
+            echo "Skipping macOS signing (missing MAC_CERT_ID)."
+            exit 0
+          fi
           echo "Sign and notarize macOS artifact"
           # Example: codesign --sign "$MAC_CERT_ID" --options runtime "dist/kojibox.app"
           # Example: xcrun notarytool submit --keychain-profile "$MAC_PROFILE" "dist/kojibox.dmg" --wait

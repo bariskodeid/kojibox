@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
+use std::net::TcpListener;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +35,7 @@ impl Default for AppConfig {
     }
 }
 
+#[derive(Debug)]
 pub struct ConfigStore {
     root: PathBuf,
 }
@@ -56,8 +58,11 @@ pub struct PortRegistry {
 impl Default for PortRegistry {
     fn default() -> Self {
         let mut ranges = HashMap::new();
+        ranges.insert("php".to_string(), PortRange { from: 9000, to: 9099 });
+        ranges.insert("node".to_string(), PortRange { from: 3000, to: 3099 });
         ranges.insert("postgres".to_string(), PortRange { from: 5400, to: 5499 });
         ranges.insert("mariadb".to_string(), PortRange { from: 3306, to: 3399 });
+        ranges.insert("mailpit".to_string(), PortRange { from: 8025, to: 8099 });
         Self {
             schema_version: 1,
             assigned: HashMap::new(),
@@ -73,6 +78,7 @@ pub struct ServiceConfig {
     pub schema_version: u32,
     pub id: String,
     pub enabled: bool,
+    pub version: Option<String>,
     pub ports: HashMap<String, u16>,
     pub env: HashMap<String, String>,
     pub args: Vec<String>,
@@ -84,6 +90,7 @@ impl Default for ServiceConfig {
             schema_version: 1,
             id: "unknown".to_string(),
             enabled: true,
+            version: None,
             ports: HashMap::new(),
             env: HashMap::new(),
             args: Vec::new(),
@@ -123,6 +130,10 @@ impl ConfigStore {
         fs::write(path, raw).map_err(|e| e.to_string())
     }
 
+    pub fn app_config_exists(&self) -> bool {
+        self.app_config_path().exists()
+    }
+
     pub fn load_port_registry(&self) -> Result<PortRegistry, String> {
         let path = self.port_registry_path();
         if !path.exists() {
@@ -150,20 +161,34 @@ impl ConfigStore {
     pub fn allocate_port(&self, service_id: &str) -> Result<u16, String> {
         let mut registry = self.load_port_registry()?;
         if let Some(port) = registry.assigned.get(service_id) {
-            return Ok(*port);
+            if Self::is_port_available(*port) {
+                return Ok(*port);
+            }
         }
         let range = registry
             .ranges
             .get(service_id)
             .ok_or_else(|| format!("no port range for {service_id}"))?;
         for port in range.from..=range.to {
-            if !registry.assigned.values().any(|value| *value == port) {
+            if !registry.assigned.values().any(|value| *value == port)
+                && Self::is_port_available(port)
+            {
                 registry.assigned.insert(service_id.to_string(), port);
                 self.save_port_registry(&registry)?;
                 return Ok(port);
             }
         }
         Err("no available ports".to_string())
+    }
+
+    pub fn resolve_port(&self, service_id: &str, desired: u16) -> Result<u16, String> {
+        if desired == 0 {
+            return self.allocate_port(service_id);
+        }
+        if Self::is_port_available(desired) {
+            return Ok(desired);
+        }
+        self.allocate_port(service_id)
     }
 
     pub fn load_service_config(&self, id: &str) -> Result<ServiceConfig, String> {
@@ -246,6 +271,10 @@ impl ConfigStore {
             }
         }
         Ok(())
+    }
+
+    fn is_port_available(port: u16) -> bool {
+        TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 
     pub fn load_app_config_or_default(&self) -> AppConfig {

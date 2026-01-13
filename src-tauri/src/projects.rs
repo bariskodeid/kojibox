@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
@@ -13,12 +14,15 @@ pub struct ProjectConfig {
     pub path: String,
     pub domain: String,
     pub stack: String,
+    #[serde(default)]
+    pub overrides: HashMap<String, String>,
 }
 
 fn default_schema_version() -> u32 {
     0
 }
 
+#[derive(Debug)]
 pub struct ProjectStore {
     root: PathBuf,
 }
@@ -59,12 +63,35 @@ impl ProjectStore {
         crate::schema::validate_project_config(raw)?;
         let project: ProjectConfig =
             serde_json::from_value(raw.clone()).map_err(|e| e.to_string())?;
+        self.validate_project_path(&project.path)?;
         self.save(&project)
+    }
+
+    pub fn delete(&self, id: &str) -> Result<(), String> {
+        let dir = self.projects_dir().join(id);
+        if dir.exists() {
+            fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn validate_project_path(&self, path: &str) -> Result<(), String> {
+        let path = PathBuf::from(path);
+        if !path.exists() {
+            return Err("project path not found".to_string());
+        }
+        if !path.is_dir() {
+            return Err("project path is not a directory".to_string());
+        }
+        Ok(())
     }
 
     fn migrate_project(&self, mut project: ProjectConfig) -> Result<ProjectConfig, String> {
         if project.schema_version == 0 {
             project.schema_version = 1;
+            self.save(&project)?;
+        }
+        if project.overrides.is_empty() && project.schema_version == 1 {
             self.save(&project)?;
         }
         Ok(project)

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "assigned": {
+    "mailpit": 8025,
+    "node": 3000,
+    "postgres": 5432,
+    "mariadb": 3306,
+    "php": 9000
+  },
+  "ranges": {
+    "postgres": {
+      "from": 5400,
+      "to": 5499
+    },
+    "mailpit": {
+      "from": 8025,
+      "to": 8099
+    },
+    "php": {
+      "from": 9000,
+      "to": 9099
+    },
+    "mariadb": {
+      "from": 3306,
+      "to": 3399
+    },
+    "node": {
+      "from": 3000,
+      "to": 3099
+    }
+  }
+}

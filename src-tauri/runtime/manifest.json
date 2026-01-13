@@ -1,0 +1,107 @@
+{
+  "version": "1",
+  "services": [
+    {
+      "name": "php",
+      "version": "8.3.2",
+      "os": "linux",
+      "arch": "x64",
+      "checksum": "",
+      "size": 0,
+      "binPath": "runtime/bin/php/8.3.2/linux-x64/php",
+      "defaultPorts": [
+        {
+          "name": "fpm",
+          "port": 9000,
+          "protocol": "tcp"
+        }
+      ],
+      "env": {
+        "PHP_INI_SCAN_DIR": "runtime/config/php"
+      },
+      "args": []
+    },
+    {
+      "name": "node",
+      "version": "20.11.1",
+      "os": "linux",
+      "arch": "x64",
+      "checksum": "",
+      "size": 0,
+      "binPath": "runtime/bin/node/20.11.1/linux-x64/node",
+      "defaultPorts": [
+        {
+          "name": "http",
+          "port": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "env": {},
+      "args": []
+    },
+    {
+      "name": "postgres",
+      "version": "16.2",
+      "os": "linux",
+      "arch": "x64",
+      "checksum": "",
+      "size": 0,
+      "binPath": "runtime/bin/postgres/16.2/linux-x64/postgres",
+      "defaultPorts": [
+        {
+          "name": "db",
+          "port": 5432,
+          "protocol": "tcp"
+        }
+      ],
+      "env": {
+        "PGDATA": "runtime/data/postgres"
+      },
+      "args": [
+        "-D",
+        "runtime/data/postgres"
+      ]
+    },
+    {
+      "name": "mariadb",
+      "version": "10.11.6",
+      "os": "linux",
+      "arch": "x64",
+      "checksum": "",
+      "size": 0,
+      "binPath": "runtime/bin/mariadb/10.11.6/linux-x64/mariadb",
+      "defaultPorts": [
+        {
+          "name": "db",
+          "port": 3306,
+          "protocol": "tcp"
+        }
+      ],
+      "env": {},
+      "args": []
+    },
+    {
+      "name": "mailpit",
+      "version": "1.15.0",
+      "os": "linux",
+      "arch": "x64",
+      "checksum": "",
+      "size": 0,
+      "binPath": "runtime/bin/mailpit/1.15.0/linux-x64/mailpit",
+      "defaultPorts": [
+        {
+          "name": "http",
+          "port": 8025,
+          "protocol": "tcp"
+        }
+      ],
+      "env": {},
+      "args": []
+    }
+  ],
+  "bundle": {
+    "createdAt": "1768286460",
+    "source": "installer",
+    "signature": ""
+  }
+}

@@ -52,6 +52,29 @@ pub fn validate_project_config(value: &Value) -> Result<(), String> {
             return Err(format!("{field} is required"));
         }
     }
+    if let Some(domain) = value.get("domain").and_then(|v| v.as_str()) {
+        if !is_valid_domain(domain) {
+            return Err("invalid domain".to_string());
+        }
+    }
+    if let Some(stack) = value.get("stack").and_then(|v| v.as_str()) {
+        if stack != "php" && stack != "node" {
+            return Err("invalid stack".to_string());
+        }
+    }
+    if let Some(overrides) = value.get("overrides") {
+        let overrides = overrides
+            .as_object()
+            .ok_or_else(|| "overrides must be an object".to_string())?;
+        for (key, value) in overrides {
+            if key.trim().is_empty() {
+                return Err("override key is required".to_string());
+            }
+            value
+                .as_str()
+                .ok_or_else(|| format!("invalid override value for {key}"))?;
+        }
+    }
     Ok(())
 }
 
@@ -142,4 +165,14 @@ fn is_valid_env_key(key: &str) -> bool {
         }
     }
     true
+}
+
+fn is_valid_domain(domain: &str) -> bool {
+    let trimmed = domain.trim();
+    if trimmed.is_empty() || !trimmed.contains('.') {
+        return false;
+    }
+    trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
 }

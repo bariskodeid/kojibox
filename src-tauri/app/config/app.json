@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "installPath": "app",
+  "updateChannel": "stable",
+  "telemetryOptIn": false,
+  "updateFeedUrl": "https://updates.kojibox.dev/feed.json",
+  "updatePublicKeys": []
+}

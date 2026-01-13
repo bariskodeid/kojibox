@@ -1,48 +1,39 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  ServiceState,
+  LogEntry,
+  InstallerStatus,
+  MetricsSnapshot,
+  AppConfig,
+  ProjectConfig,
+  ServiceConfig,
+  DomainMapping,
+  ProxyRule,
+  CertMeta,
+  TrustResult,
+  RuntimeManifest,
+  RuntimeDownloadStatus,
+  ServiceBinary,
+} from "./types";
 
-type ServiceState = {
-  id: string;
-  state: string;
-  pid: number | null;
-  lastError: string | null;
-  lastUpdated: string;
-};
-type LogEntry = {
-  ts: string;
-  level: string;
-  message: string;
-};
-type InstallerStatus = {
-  phase: string;
-  progress: number;
-};
-type AppConfig = {
-  schemaVersion: number;
-  installPath: string;
-  updateChannel: string;
-  telemetryOptIn: boolean;
-  updateFeedUrl: string;
-  updatePublicKeys: string[];
-};
-type ProjectConfig = {
-  schemaVersion: number;
-  id: string;
-  name: string;
-  path: string;
-  domain: string;
-  stack: string;
-};
-type ServiceConfig = {
-  schemaVersion: number;
-  id: string;
-  enabled: boolean;
-  ports: Record<string, number>;
-  env: Record<string, string>;
-  args: string[];
-};
+import SetupWizard from "./components/SetupWizard.vue";
+import AppHeader from "./components/AppHeader.vue";
+import ServiceCard from "./components/ServiceCard.vue";
+import LogViewer from "./components/LogViewer.vue";
+import ProjectManager from "./components/ProjectManager.vue";
+import ServiceSettings from "./components/ServiceSettings.vue";
+import ToolingManager from "./components/ToolingManager.vue";
+import AppStatus from "./components/AppStatus.vue";
+import GlobalConfig from "./components/GlobalConfig.vue";
+import PhpManager from "./components/PhpManager.vue";
+import DatabaseInfo from "./components/DatabaseInfo.vue";
+import TaskManager from "./components/TaskManager.vue";
+import ToastContainer, { type Toast } from "./components/ToastContainer.vue";
+import AboutModal from "./components/AboutModal.vue";
 
+// State
 const services = ref<ServiceState[]>([]);
 const busy = ref<string | null>(null);
 const errorMsg = ref<string | null>(null);
@@ -50,37 +41,66 @@ const logsByService = ref<Record<string, LogEntry[]>>({});
 const healthByService = ref<Record<string, string>>({});
 const logFilter = ref<"all" | "error">("all");
 const diagPath = ref<string | null>(null);
+const showAbout = ref(false);
+
 const updateStatus = ref<{ available: boolean; version: string } | null>(null);
 const installerStatus = ref<InstallerStatus | null>(null);
 const updateProgress = ref<{ phase: string; progress: number } | null>(null);
+
 const logPathByService = ref<Record<string, string>>({});
-const serviceConfigError = ref<string | null>(null);
 const appConfig = ref<AppConfig | null>(null);
 const configError = ref<string | null>(null);
-const projects = ref<ProjectConfig[]>([]);
-const newProject = ref<ProjectConfig>({
-  schemaVersion: 1,
-  id: "",
-  name: "",
-  path: "",
-  domain: "",
-  stack: "php",
-});
-const serviceConfigs = ref<ServiceConfig[]>([]);
-const envDraft = ref<Record<string, { key: string; value: string }[]>>({});
-const argsDraft = ref<Record<string, string>>({});
-const serviceDirty = ref<Record<string, boolean>>({});
-const applyWithoutRestart = ref<Record<string, boolean>>({});
-let refreshTimer: number | null = null;
-const isUpdateRunning = () =>
-  updateProgress.value && updateProgress.value.phase !== "idle" && updateProgress.value.phase !== "complete";
-const isInstallerRunning = () =>
-  installerStatus.value && installerStatus.value.phase !== "idle" && installerStatus.value.phase !== "complete";
+const metricsSnapshot = ref<MetricsSnapshot | null>(null);
+const needsSetup = ref(false);
 
-function formatTs(ts: string) {
-  const value = Number(ts);
-  if (!Number.isFinite(value)) return ts;
-  return new Date(value * 1000).toLocaleTimeString();
+const projects = ref<ProjectConfig[]>([]);
+const serviceConfigs = ref<ServiceConfig[]>([]);
+
+const domainMappings = ref<DomainMapping[]>([]);
+const proxyRules = ref<ProxyRule[]>([]);
+const certs = ref<CertMeta[]>([]);
+const trustResult = ref<TrustResult | null>(null);
+
+const runtimeManifest = ref<RuntimeManifest | null>(null);
+const runtimeDownloadStatus = ref<RuntimeDownloadStatus | null>(null);
+const runtimeService = ref("php");
+const runtimeVersion = ref("8.3.2");
+
+const toasts = ref<Toast[]>([]);
+let toastIdCounter = 0;
+let refreshTimer: number | null = null;
+
+const mailpitUrl = computed(() => {
+  const config = serviceConfigs.value.find((service) => service.id === "mailpit");
+  if (!config || !config.enabled) return null;
+  const port = config.ports.main || 8025;
+  return `http://127.0.0.1:${port}`;
+});
+
+function addToast(message: string, kind: "info" | "error" | "success" = "info") {
+  const id = ++toastIdCounter;
+  toasts.value.push({ id, message, kind });
+  setTimeout(() => removeToast(id), 5000);
+}
+
+function removeToast(id: number) {
+  toasts.value = toasts.value.filter(t => t.id !== id);
+}
+
+// Keep simpler alias for existing code
+const toast = computed({
+    get: () => toasts.value.length ? { message: toasts.value[toasts.value.length - 1].message, kind: toasts.value[toasts.value.length - 1].kind } : null,
+    set: (val) => { if (val) addToast(val.message, val.kind) }
+});
+
+// Actions
+
+async function openTerminal() {
+    try {
+        await invoke("open_terminal");
+    } catch (e) {
+        addToast(String(e), "error");
+    }
 }
 
 async function loadServices() {
@@ -128,23 +148,24 @@ async function loadAppConfig() {
   }
 }
 
-const healthSummary = ref<Record<string, string>>({});
-
-async function loadHealthSummary() {
+async function checkFirstRun() {
   try {
-    healthSummary.value = await invoke("health_summary");
+    const exists: boolean = await invoke("config_app_exists");
+    needsSetup.value = !exists;
   } catch (error) {
     errorMsg.value = String(error);
   }
 }
 
-async function saveAppConfig() {
-  if (!appConfig.value) return;
+async function saveAppConfig(newConfig: AppConfig) {
   try {
     configError.value = null;
-    await invoke("config_set_app", { app: appConfig.value });
+    await invoke("config_set_app", { app: newConfig });
+    await loadAppConfig();
+    toast.value = { message: "App config saved", kind: "info" };
   } catch (error) {
     configError.value = String(error);
+    toast.value = { message: "Failed to save app config", kind: "error" };
   }
 }
 
@@ -156,24 +177,23 @@ async function loadProjects() {
   }
 }
 
-async function saveProject() {
-  if (!newProject.value.id) {
-    errorMsg.value = "project id is required";
-    return;
-  }
+async function saveProject(project: ProjectConfig) {
   try {
-    await invoke("projects_save", { project: newProject.value });
+    await invoke("projects_save", { project });
     await loadProjects();
-    newProject.value = {
-      schemaVersion: 1,
-      id: "",
-      name: "",
-      path: "",
-      domain: "",
-      stack: "php",
-    };
+    toast.value = { message: `Saved project ${project.name}`, kind: "info" };
   } catch (error) {
-    errorMsg.value = String(error);
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function deleteProject(id: string) {
+  try {
+    await invoke("projects_delete", { id });
+    await loadProjects();
+    toast.value = { message: `Deleted project ${id}`, kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
   }
 }
 
@@ -185,6 +205,7 @@ async function loadServiceConfigs() {
         return config;
       } catch {
         return {
+          schemaVersion: 1,
           id: service.id,
           enabled: true,
           ports: { main: 0 },
@@ -194,141 +215,65 @@ async function loadServiceConfigs() {
       }
     }),
   );
+  // We don't overwrite user drafts here, the component handles that via watcher
   serviceConfigs.value = results;
-  envDraft.value = Object.fromEntries(
-    results.map((config) => [
-      config.id,
-      Object.entries(config.env).map(([key, value]) => ({ key, value })),
-    ]),
-  );
-  argsDraft.value = Object.fromEntries(
-    results.map((config) => [config.id, config.args.join(" ")]),
-  );
-  serviceDirty.value = Object.fromEntries(results.map((config) => [config.id, false]));
-  applyWithoutRestart.value = Object.fromEntries(results.map((config) => [config.id, false]));
-}
-
-function findServiceState(id: string) {
-  return services.value.find((service) => service.id === id);
-}
-
-function detectPortConflict(currentId: string, port: number) {
-  if (!port) return null;
-  for (const config of serviceConfigs.value) {
-    if (config.id !== currentId && config.ports.main === port) {
-      return config.id;
-    }
-  }
-  return null;
 }
 
 async function saveServiceConfig(config: ServiceConfig) {
   try {
-    serviceConfigError.value = null;
-    const envEntries = (envDraft.value[config.id] || []).filter((entry) => entry.key.trim());
-    for (const entry of envEntries) {
-      if (!isValidEnvKey(entry.key)) {
-        serviceConfigError.value = `invalid env key: ${entry.key}`;
-        return;
-      }
-    }
-    const envError = validateEnvEntries(envEntries);
-    if (envError) {
-      serviceConfigError.value = envError;
-      return;
-    }
-    config.env = Object.fromEntries(envEntries);
-    config.args = (argsDraft.value[config.id] || "")
-      .split(" ")
-      .map((arg) => arg.trim())
-      .filter(Boolean);
-    const mainPort = config.ports.main;
-    if (mainPort < 0 || mainPort > 65535) {
-      serviceConfigError.value = "port out of range";
-      return;
-    }
-    const conflict = detectPortConflict(config.id, mainPort);
-    if (conflict) {
-      serviceConfigError.value = `port conflict with ${conflict}`;
-      return;
-    }
     await invoke("config_set_service", { service: config });
-    serviceDirty.value[config.id] = false;
     toast.value = { message: `Saved config for ${config.id}`, kind: "info" };
+    // Force reload to sync
+    await loadServiceConfigs();
   } catch (error) {
-    serviceConfigError.value = String(error);
-    toast.value = { message: serviceConfigError.value || "Save failed", kind: "error" };
+    toast.value = { message: String(error) || "Save failed", kind: "error" };
   }
 }
 
-const toast = ref<{ message: string; kind: "info" | "error" } | null>(null);
-
-async function applyServiceConfig(config: ServiceConfig) {
+async function applyServiceConfig(config: ServiceConfig, restart: boolean) {
   await saveServiceConfig(config);
-  if (applyWithoutRestart.value[config.id]) {
+  if (!restart) {
+    await invoke("services_apply_config_no_restart", { id: config.id });
     toast.value = { message: `Applied config for ${config.id}`, kind: "info" };
     return;
   }
   await invoke("services_apply_config", { id: config.id });
   toast.value = { message: `Applied config and restarted ${config.id}`, kind: "info" };
+  await loadServices();
 }
 
 async function resetServiceConfig(id: string) {
   try {
-    serviceConfigError.value = null;
-    if (!confirm(`Reset config for ${id}?`)) {
-      return;
-    }
-    const config: ServiceConfig = await invoke("config_reset_service", { id });
-    const index = serviceConfigs.value.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      serviceConfigs.value[index] = config;
-    }
+    await invoke("config_reset_service", { id });
     await loadServiceConfigs();
     toast.value = { message: `Reset config for ${id}`, kind: "info" };
   } catch (error) {
-    serviceConfigError.value = String(error);
-    toast.value = { message: serviceConfigError.value || "Reset failed", kind: "error" };
+    toast.value = { message: String(error) || "Reset failed", kind: "error" };
   }
 }
 
-async function saveAllServiceConfigs() {
-  for (const config of serviceConfigs.value) {
-    if (serviceDirty.value[config.id]) {
-      await saveServiceConfig(config);
+async function openConfig(id: string) {
+    // Map service id to config file path relative to root (or absolute)
+    // Ideally backend exposes this path. For now hardcode typical paths.
+    let path = `runtime/config/${id}`;
+    if (id === 'php') path += '/php.ini';
+    else if (id === 'mariadb') path += '/my.cnf';
+    else if (id === 'postgres') path = 'runtime/data/postgres/postgresql.conf'; // usually in data dir
+    
+    // We need absolute path for system open
+    // Since we don't have easy absolute path resolution here, let's ask backend to open it 
+    // by resolving relative to CWD.
+    // system_open_file takes path.
+    
+    // But wait, system_open_file implemented in backend takes String and passes to Command.
+    // If we pass relative path, it depends on CWD. App CWD is project root in dev, or install dir in prod.
+    // Should be fine.
+    
+    try {
+        await invoke("system_open_file", { path });
+    } catch (e) {
+        toast.value = { message: "Failed to open config: " + e, kind: "error" };
     }
-  }
-  toast.value = { message: "Saved all service configs", kind: "info" };
-}
-
-function isValidEnvKey(key: string) {
-  return /^[A-Z_][A-Z0-9_]*$/.test(key);
-}
-
-function markDirty(id: string) {
-  serviceDirty.value[id] = true;
-}
-
-function validateEnvEntries(entries: { key: string; value: string }[]) {
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    if (!entry.key.trim()) continue;
-    if (seen.has(entry.key)) {
-      return `duplicate env key: ${entry.key}`;
-    }
-    if (!entry.value.trim()) {
-      return `env value required for ${entry.key}`;
-    }
-    seen.add(entry.key);
-  }
-  return null;
-}
-
-function addEnvRow(id: string) {
-  const rows = envDraft.value[id] || [];
-  rows.push({ key: "", value: "" });
-  envDraft.value[id] = rows;
-  serviceDirty.value[id] = true;
 }
 
 async function loadHealth() {
@@ -394,6 +339,39 @@ async function exportDiagnostics() {
   }
 }
 
+async function exportLogs(id: string) {
+  try {
+    const path: string = await invoke("logs_export", {
+      service: id,
+      level: logFilter.value === "error" ? "error" : null,
+      limit: 200,
+    });
+    toast.value = { message: `Exported logs to ${path}`, kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function clearLogs(id: string) {
+    if (!confirm(`Clear logs for ${id}?`)) return;
+    try {
+        await invoke("logs_clear", { service: id });
+        toast.value = { message: `Logs cleared for ${id}`, kind: "info" };
+        await loadLogs();
+    } catch (error) {
+        toast.value = { message: String(error), kind: "error" };
+    }
+}
+
+async function exportViewerLogs(params: { service: string | null; level: string | null; limit: number }) {
+  try {
+    const path: string = await invoke("logs_export", params);
+    toast.value = { message: `Exported logs to ${path}`, kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
 async function checkUpdates() {
   try {
     errorMsg.value = null;
@@ -439,23 +417,228 @@ async function startInstaller() {
   }
 }
 
-onMounted(loadServices);
-onMounted(loadInstallerStatus);
-onMounted(loadUpdateProgress);
-onMounted(loadAppConfig);
-onMounted(loadProjects);
-onMounted(loadHealthSummary);
+async function loadMetrics() {
+  try {
+    metricsSnapshot.value = await invoke("metrics_snapshot");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function loadDomains() {
+  try {
+    domainMappings.value = await invoke("domains_list");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function saveDomain(mapping: DomainMapping) {
+  try {
+    await invoke("domains_upsert", { mapping });
+    await loadDomains();
+    toast.value = { message: "Domain saved", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function deleteDomain(domain: string) {
+  try {
+    await invoke("domains_remove", { domain });
+    await loadDomains();
+    toast.value = { message: "Domain removed", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function applyHosts() {
+  try {
+    await invoke("hosts_apply", { mappings: domainMappings.value });
+    toast.value = { message: "Hosts applied", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function rollbackHosts() {
+  try {
+    await invoke("hosts_rollback");
+    toast.value = { message: "Hosts rolled back", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function loadProxyRules() {
+  try {
+    proxyRules.value = await invoke("proxy_rules");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function saveProxy(rule: ProxyRule) {
+  try {
+    // Append
+    const newRules = [...proxyRules.value, rule];
+    await invoke("proxy_apply", { rules: newRules });
+    proxyRules.value = newRules;
+    toast.value = { message: "Proxy rule added", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function deleteProxy(index: number) {
+  try {
+    const newRules = proxyRules.value.filter((_, idx) => idx !== index);
+    await invoke("proxy_apply", { rules: newRules });
+    proxyRules.value = newRules;
+    toast.value = { message: "Proxy rule deleted", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function applyProxy() {
+  try {
+    await invoke("proxy_apply", { rules: proxyRules.value });
+    toast.value = { message: "Proxy rules applied", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function loadCerts() {
+  try {
+    certs.value = await invoke("certs_list");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function generateCert(domains: string[]) {
+  try {
+    await invoke("certs_generate", { domains });
+    await loadCerts();
+    toast.value = { message: "Certificate generated", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function trustCert(path: string, os: boolean, apply: boolean) {
+  try {
+    if (!os) {
+        const result: string = await invoke("certs_trust", { certPath: path });
+        toast.value = { message: `Trust instructions: ${result}`, kind: "info" };
+    } else {
+        trustResult.value = await invoke("certs_trust_os", { certPath: path, apply });
+        if (trustResult.value?.applied) {
+            toast.value = { message: "Trust applied via OS command", kind: "info" };
+        }
+    }
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function loadRuntimeManifest() {
+  try {
+    runtimeManifest.value = await invoke("runtime_get_manifest");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function loadRuntimeDownloadStatus() {
+  try {
+    runtimeDownloadStatus.value = await invoke("runtime_download_status");
+  } catch (error) {
+    errorMsg.value = String(error);
+  }
+}
+
+async function refreshRuntimeManifest() {
+  try {
+    runtimeManifest.value = await invoke("runtime_refresh_manifest");
+    toast.value = { message: "Manifest refreshed", kind: "info" };
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function ensureRuntime(name: string, version: string) {
+  try {
+    const result: ServiceBinary = await invoke("runtime_ensure_service", { name, version });
+    toast.value = { message: `Ready: ${result.binPath}`, kind: "info" };
+    await loadRuntimeManifest();
+  } catch (error) {
+    toast.value = { message: String(error), kind: "error" };
+  }
+}
+
+async function onFixRuntime(id: string) {
+    // Scroll to runtime section
+    const runtimeSection = document.getElementById('runtime-section');
+    if (runtimeSection) {
+        runtimeSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    // Preset runtime form
+    runtimeService.value = id;
+    // Trigger ensure immediately
+    await ensureRuntime(id, runtimeVersion.value);
+}
+
+function onSetupComplete() {
+  needsSetup.value = false;
+  loadAppConfig();
+  loadServices();
+}
+
 onMounted(() => {
+  loadServices();
+  loadInstallerStatus();
+  loadUpdateProgress();
+  loadAppConfig();
+  checkFirstRun();
+  loadProjects();
+  loadHealth();
+  loadMetrics();
+  loadDomains();
+  loadProxyRules();
+  loadCerts();
+  loadRuntimeManifest();
+  loadRuntimeDownloadStatus();
+  
   refreshTimer = window.setInterval(async () => {
-    await loadServices();
-    await loadInstallerStatus();
-    await loadUpdateProgress();
-    await loadAppConfig();
-    await loadProjects();
-    await loadHealthSummary();
-    toast.value = null;
+    // Silent background refresh
+    await Promise.all([
+        invoke("services_list").then((res) => { services.value = res as ServiceState[] }),
+        loadServiceConfigs(), // Updates if not dirty
+        loadLogs(),
+        loadLogPaths(),
+        loadHealth(),
+        loadInstallerStatus(),
+        loadUpdateProgress(),
+        loadProjects(),
+        loadMetrics(),
+        loadDomains(),
+        loadProxyRules(),
+        loadCerts(),
+        loadRuntimeManifest(),
+        loadRuntimeDownloadStatus()
+    ]);
+    
+    // Auto-clear toast after 5s
+    if (toast.value) {
+        setTimeout(() => { toast.value = null }, 5000);
+    }
   }, 5000);
 });
+
 onUnmounted(() => {
   if (refreshTimer) {
     window.clearInterval(refreshTimer);
@@ -466,563 +649,228 @@ onUnmounted(() => {
 
 <template>
   <main class="app">
-    <header class="header">
-      <div>
-        <h1>Kojibox</h1>
-        <p class="subtitle">Portable dev stack manager</p>
-      </div>
-      <div class="header-actions">
-        <div class="filter">
-          <button
-            class="ghost"
-            :data-active="logFilter === 'all'"
-            @click="logFilter = 'all'"
-          >
-            All Logs
-          </button>
-          <button
-            class="ghost"
-            :data-active="logFilter === 'error'"
-            @click="logFilter = 'error'"
-          >
-            Errors
-          </button>
-        </div>
-        <button class="ghost" @click="loadServices">Refresh</button>
-        <button class="ghost" @click="exportDiagnostics">Export Diagnostics</button>
-        <button class="ghost" @click="checkUpdates">Check Updates</button>
-      </div>
-    </header>
+    <SetupWizard :needs-setup="needsSetup" @setup-complete="onSetupComplete" />
+    
+    <AppHeader 
+      v-model:logFilter="logFilter"
+      @refresh="loadServices"
+      @export-diagnostics="exportDiagnostics"
+      @check-updates="checkUpdates"
+      @open-terminal="openTerminal"
+      @open-about="showAbout = true"
+    />
 
-    <section v-if="toast" class="notice" :data-kind="toast.kind">
-      {{ toast.message }}
-    </section>
+    <AboutModal :show="showAbout" version="0.1.0" @close="showAbout = false" />
+
+    <ToastContainer :toasts="toasts" @remove="removeToast" />
 
     <section v-if="diagPath" class="notice">
       Diagnostics saved to: {{ diagPath }}
     </section>
 
-    <section class="notice" v-if="appConfig">
-      <div class="config">
-        <div>
-          <label>Install Path</label>
-          <input v-model="appConfig.installPath" />
-        </div>
-        <div>
-          <label>Schema Version</label>
-          <input v-model.number="appConfig.schemaVersion" disabled />
-        </div>
-        <div>
-          <label>Update Channel</label>
-          <select v-model="appConfig.updateChannel">
-            <option value="stable">stable</option>
-            <option value="beta">beta</option>
-          </select>
-        </div>
-        <div>
-          <label>Update Feed URL</label>
-          <input v-model="appConfig.updateFeedUrl" />
-        </div>
-        <div class="actions-inline">
-          <button class="ghost" @click="saveAppConfig">Save Config</button>
-        </div>
-      </div>
-      <p v-if="configError" class="error-inline">{{ configError }}</p>
-    </section>
+    <GlobalConfig 
+        :app-config="appConfig" 
+        :config-error="configError" 
+        @save="saveAppConfig"
+    />
 
-    <section class="notice">
-      <h3>Projects</h3>
-      <div class="project-form">
-        <input v-model="newProject.id" placeholder="id" />
-        <input v-model="newProject.name" placeholder="name" />
-        <input v-model="newProject.path" placeholder="path" />
-        <input v-model="newProject.domain" placeholder="domain" />
-        <select v-model="newProject.stack">
-          <option value="php">php</option>
-          <option value="node">node</option>
-        </select>
-        <button class="ghost" @click="saveProject">Save Project</button>
-      </div>
-      <ul class="project-list">
-        <li v-for="project in projects" :key="project.id">
-          <strong>{{ project.name }}</strong> ({{ project.stack }}) - {{ project.domain }}
-        </li>
-      </ul>
-    </section>
+    <AppStatus
+        :installer-status="installerStatus"
+        :update-status="updateStatus"
+        :update-progress="updateProgress"
+        :metrics="metricsSnapshot"
+        :runtime-manifest="runtimeManifest"
+        :runtime-download-status="runtimeDownloadStatus"
+        v-model:runtime-service="runtimeService"
+        v-model:runtime-version="runtimeVersion"
+        @apply-update="applyUpdate"
+        @start-installer="startInstaller"
+        @ensure-runtime="ensureRuntime"
+        @refresh-runtime="refreshRuntimeManifest"
+    />
 
-    <section class="notice">
-      <h3>Service Settings (stub)</h3>
-      <div class="actions-inline">
-        <button class="ghost" @click="saveAllServiceConfigs">Save All</button>
-      </div>
-      <div class="project-form" v-if="serviceConfigs.length">
-        <div v-for="config in serviceConfigs" :key="config.id">
-          <strong>{{ config.id }}</strong>
-          <span
-            v-if="findServiceState(config.id)"
-            class="status"
-            :data-state="findServiceState(config.id)?.state"
-          >
-            {{ findServiceState(config.id)?.state }}
-          </span>
-          <span v-if="applyWithoutRestart[config.id]" class="hint">no-restart</span>
-          <details class="service-json">
-            <summary>Show JSON</summary>
-            <pre>{{ JSON.stringify(config, null, 2) }}</pre>
-          </details>
-          <div class="service-config">
-            <label>Enabled</label>
-            <input type="checkbox" v-model="config.enabled" @change="markDirty(config.id)" />
-          </div>
-          <div class="service-config">
-            <label>Port</label>
-            <input v-model.number="config.ports.main" @input="markDirty(config.id)" />
-            <span class="hint" v-if="config.ports.main === 0">auto-assign</span>
-          </div>
-          <div class="service-config">
-            <label>Args</label>
-            <input
-              v-model="argsDraft[config.id]"
-              placeholder="--flag --value"
-              @input="markDirty(config.id)"
-            />
-          </div>
-          <div class="service-config">
-            <label>Env</label>
-            <div class="env-list">
-              <div v-for="(row, idx) in envDraft[config.id] || []" :key="idx" class="env-row">
-                <input v-model="row.key" placeholder="KEY" @input="markDirty(config.id)" />
-                <input v-model="row.value" placeholder="VALUE" @input="markDirty(config.id)" />
-              </div>
-              <button class="ghost" @click="addEnvRow(config.id)">Add Env</button>
-            </div>
-          </div>
-          <div class="service-config">
-            <label>Apply Without Restart</label>
-            <input type="checkbox" v-model="applyWithoutRestart[config.id]" />
-          </div>
-          <div class="service-config">
-            <button class="ghost" @click="saveServiceConfig(config)">Save</button>
-            <button class="primary" @click="applyServiceConfig(config)">Apply & Restart</button>
-            <button class="ghost" @click="resetServiceConfig(config.id)">Reset</button>
-            <span v-if="serviceDirty[config.id]" class="dirty">unsaved</span>
-          </div>
-        </div>
-      </div>
-      <p v-if="serviceConfigError" class="error-inline">{{ serviceConfigError }}</p>
-    </section>
+    <DatabaseInfo 
+        :services="services"
+        :configs="serviceConfigs"
+    />
 
-    <section v-if="updateStatus" class="notice">
-      Update: {{
-        updateStatus.available
-          ? `available ${updateStatus.version}`
-          : "up to date"
-      }}
-    </section>
+    <TaskManager :projects="projects" />
 
-    <section class="notice">
-      <h3>Health Summary</h3>
-      <ul class="project-list">
-        <li v-for="(value, key) in healthSummary" :key="key">
-          <strong>{{ key }}</strong>: {{ value }}
-        </li>
-      </ul>
-    </section>
+    <ProjectManager 
+        :projects="projects"
+        @save="saveProject"
+        @delete="deleteProject"
+    />
 
-    <section class="notice" v-if="updateProgress">
-      Update progress: {{ updateProgress.phase }} ({{
-        Math.round(updateProgress.progress * 100)
-      }}%)
-      <button class="ghost" :disabled="isUpdateRunning()" @click="applyUpdate">Apply Update</button>
-      <div class="progress">
-        <div class="progress-bar" :style="{ width: `${updateProgress.progress * 100}%` }"></div>
-      </div>
-    </section>
+    <ServiceSettings 
+        :configs="serviceConfigs" 
+        :service-states="services"
+        @save="saveServiceConfig"
+        @apply="applyServiceConfig"
+        @reset="resetServiceConfig"
+        @edit-config="openConfig"
+    />
 
-    <section class="notice" v-if="installerStatus">
-      Installer: {{ installerStatus.phase }} ({{ Math.round(installerStatus.progress * 100) }}%)
-      <button class="ghost" :disabled="isInstallerRunning()" @click="startInstaller">
-        Run Installer
-      </button>
-      <div class="progress">
-        <div class="progress-bar" :style="{ width: `${installerStatus.progress * 100}%` }"></div>
-      </div>
-    </section>
+    <PhpManager @restart-php="restartService('php')" />
 
-    <section v-if="errorMsg" class="error">
-      {{ errorMsg }}
+    <ToolingManager
+        :domains="domainMappings"
+        :proxy-rules="proxyRules"
+        :certs="certs"
+        :trust-result="trustResult"
+        @save-domain="saveDomain"
+        @delete-domain="deleteDomain"
+        @apply-hosts="applyHosts"
+        @rollback-hosts="rollbackHosts"
+        @save-proxy="saveProxy"
+        @delete-proxy="deleteProxy"
+        @apply-proxy="applyProxy"
+        @generate-cert="generateCert"
+        @trust-cert="trustCert"
+    />
+
+    <LogViewer 
+        :services="services"
+        :logs-by-service="logsByService"
+        @export="exportViewerLogs"
+    />
+
+    <section class="notice" v-if="mailpitUrl">
+      <h3>Mailpit</h3>
+      <iframe class="mailpit-frame" :src="mailpitUrl" title="Mailpit"></iframe>
     </section>
 
     <section class="grid">
-      <article v-for="service in services" :key="service.id" class="card">
-        <div class="card-head">
-          <div>
-            <h2>{{ service.id }}</h2>
-            <p class="status" :data-state="service.state">{{ service.state }}</p>
-          </div>
-          <span class="pid" v-if="service.pid">pid {{ service.pid }}</span>
-        </div>
-        <p class="health" :data-health="healthByService[service.id]">
-          health: {{ healthByService[service.id] || "unknown" }}
-        </p>
-        <p v-if="service.lastError" class="error-inline">
-          {{ service.lastError }}
-        </p>
-        <div class="actions">
-          <button
-            class="primary"
-            :disabled="busy === service.id"
-            @click="startService(service.id)"
-          >
-            Start
-          </button>
-          <button
-            class="secondary"
-            :disabled="busy === service.id"
-            @click="stopService(service.id)"
-          >
-            Stop
-          </button>
-          <button
-            class="ghost"
-            :disabled="busy === service.id"
-            @click="restartService(service.id)"
-          >
-            Restart
-          </button>
-        </div>
-        <div class="logs">
-          <p class="logs-title">Recent logs</p>
-          <p class="logs-path" v-if="logPathByService[service.id]">
-            File: {{ logPathByService[service.id] }}
-          </p>
-          <ul>
-            <li
-              v-for="(entry, index) in (logsByService[service.id] || []).filter((item) =>
-                logFilter === 'all' ? true : item.level === 'error',
-              )"
-              :key="index"
-            >
-              <span class="log-ts">{{ formatTs(entry.ts) }}</span>
-              <span class="log-level" :data-level="entry.level">{{ entry.level }}</span>
-              <span class="log-message">{{ entry.message }}</span>
-            </li>
-          </ul>
-        </div>
-      </article>
+      <ServiceCard 
+        v-for="service in services" 
+        :key="service.id"
+        :service="service"
+        :logs="logsByService[service.id] || []"
+        :health="healthByService[service.id] || 'unknown'"
+        :log-filter="logFilter"
+        :log-path="logPathByService[service.id]"
+        :busy="busy === service.id"
+        @start="startService"
+        @stop="stopService"
+        @restart="restartService"
+        @export-logs="exportLogs"
+        @clear-logs="clearLogs"
+        @fix-runtime="onFixRuntime"
+      />
+    </section>
+    
+    <section v-if="errorMsg" class="error">
+      {{ errorMsg }}
     </section>
   </main>
 </template>
 
 <style>
 :root {
+  --bg-color: #f1f0ea;
+  --text-color: #1b1b1b;
+  --card-bg: #ffffff;
+  --border-color: #1b1b1b;
+  --accent-color: #ffd36a;
+  --secondary-color: #c7e5ff;
+  --ghost-bg: #fefefe;
+  --success-color: #0b7a3e;
+  --warning-color: #c17b1b;
+  --error-color: #b23b3b;
+  --code-bg: #f3f3f3;
+  --hint-color: #5b5b5b;
+  
   font-family: "Fira Sans", "Trebuchet MS", sans-serif;
   font-size: 16px;
-  color: #1b1b1b;
-  background: #f1f0ea;
+  color: var(--text-color);
+  background: var(--bg-color);
   text-rendering: optimizeLegibility;
+}
+
+.dark {
+  --bg-color: #1a1a1a;
+  --text-color: #e0e0e0;
+  --card-bg: #2a2a2a;
+  --border-color: #4a4a4a;
+  --accent-color: #ffca28;
+  --secondary-color: #3d5afe;
+  --ghost-bg: #2a2a2a;
+  --success-color: #66bb6a;
+  --warning-color: #ffa726;
+  --error-color: #ef5350;
+  --code-bg: #333333;
+  --hint-color: #9e9e9e;
 }
 
 body {
   margin: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
 }
 
 .app {
   padding: 32px;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 2px solid #1b1b1b;
-  padding-bottom: 16px;
-  margin-bottom: 24px;
-}
-
-.subtitle {
-  margin: 4px 0 0;
-  color: #5b5b5b;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.filter {
-  display: flex;
-  gap: 8px;
-}
-
-.filter button[data-active="true"] {
-  background: #1b1b1b;
-  color: #ffffff;
-}
-
-.error {
-  background: #fbe3e3;
-  border: 1px solid #d96a6a;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.notice[data-kind="error"] {
-  background: #fbe3e3;
-  border-color: #d96a6a;
-}
-.progress {
-  height: 6px;
-  background: #d8ead8;
-  margin-top: 8px;
-  border: 1px solid #6fb56f;
-}
-
-.progress-bar {
-  height: 100%;
-  background: #3d8b3d;
-  transition: width 0.2s ease;
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+  margin-top: 24px;
 }
 
-.card {
-  background: #ffffff;
-  border: 2px solid #1b1b1b;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 4px 4px 0 #1b1b1b;
+.notice {
+  background: var(--card-bg); /* Use card bg for notices in dark mode or lighter variant? */
+  border: 1px solid var(--success-color);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: var(--text-color);
 }
 
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+/* Override notice specific colors */
+:root .notice {
+    background: #e8f4e8;
+}
+.dark .notice {
+    background: #1e3320;
+    border-color: #2e7d32;
 }
 
-.status {
-  margin: 6px 0 0;
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 12px;
+.notice[data-kind="error"], .error {
+  background: #fbe3e3;
+  border: 1px solid var(--error-color);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.dark .notice[data-kind="error"], .dark .error {
+    background: #3e2020;
 }
 
-.status[data-state="running"] {
-  color: #0b7a3e;
+.notice[data-kind="info"] {
+  border-color: var(--success-color);
 }
 
-.status[data-state="starting"] {
-  color: #c17b1b;
+.mailpit-frame {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--border-color);
+  background: #fff;
 }
 
-.status[data-state="stopped"] {
-  color: #b23b3b;
-}
-
-.pid {
-  font-size: 12px;
-  color: #5b5b5b;
-}
-
-.health {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #4a4a4a;
-}
-
-.health[data-health="ok"] {
-  color: #0b7a3e;
-}
-
-.health[data-health="error"] {
-  color: #b23b3b;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-input,
-select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-.config {
-  display: grid;
-  gap: 8px;
-}
-
-.config label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.actions-inline {
-  margin-top: 8px;
-}
-
-.project-form {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.service-config {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
-}
-
-.hint {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #6b6b6b;
-}
-
-.service-json {
-  margin: 6px 0;
-}
-
-.service-json pre {
-  background: #f3f3f3;
-  border: 1px solid #d0d0d0;
-  padding: 8px;
-  overflow: auto;
-  max-height: 160px;
-  font-size: 12px;
-}
-
-.env-list {
-  display: grid;
-  gap: 6px;
-}
-
-.env-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.dirty {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: #c17b1b;
-}
-
-.project-list {
-  margin: 8px 0 0;
-  padding-left: 16px;
-}
-
-.primary {
-  background: #ffd36a;
-}
-
-.secondary {
-  background: #c7e5ff;
-}
-
-.ghost {
-  background: #ffffff;
-}
-
-.logs {
-  border-top: 1px dashed #1b1b1b;
-  padding-top: 8px;
-  font-size: 12px;
-  color: #333;
-}
-
-.logs-title {
-  margin: 0 0 6px;
-  text-transform: uppercase;
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.logs-path {
-  margin: 0 0 6px;
-  font-size: 10px;
-  color: #666;
-}
-
-.logs ul {
-  margin: 0;
-  padding-left: 16px;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.log-ts {
-  color: #777;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level {
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level[data-level="error"] {
-  color: #b23b3b;
-}
-
-.log-level[data-level="info"] {
-  color: #0b7a3e;
-}
-
-.log-message {
-  color: #333;
-}
 @media (max-width: 720px) {
   .app {
     padding: 20px;
   }
+}
+
+/* Update generic components to use vars */
+button {
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+input, select {
+    background: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
 }
 </style>

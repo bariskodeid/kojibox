@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "php",
+  "enabled": true,
+  "version": null,
+  "ports": {
+    "main": 9000
+  },
+  "env": {},
+  "args": []
+}
