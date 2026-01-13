@@ -72,12 +72,12 @@ fn db_dump(state: State<'_, AppState>, service: String, db_name: String, path: S
 
 #[tauri::command]
 fn open_terminal(state: State<'_, AppState>) -> Result<(), String> {
-    let services = state.services.lock().expect("service lock");
+    let _services = state.services.lock().expect("service lock");
     // Hacky way to get the runtime manager from service manager or create new one
     // Since ServiceManager owns runtime, we can create a temporary one for path resolution
     // or expose it. For now, creating new RuntimeManager is cheap.
     let runtime = runtime::RuntimeManager::new(".");
-    let bin_path = runtime.root.join("runtime/bin"); // base path
+    let _bin_path = runtime.root.join("runtime/bin"); // base path
     
     // We want to construct a PATH that includes all service bin dirs
     // This logic duplicates some of RuntimeManager::scoped_path but for all services
@@ -625,24 +625,39 @@ fn check_port_availability(port: u16) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let runtime = runtime::RuntimeManager::new(".");
+    // In dev (cargo run), CWD is src-tauri. We want data in project root "app" to avoid watch loops.
+    // In prod (bundle), CWD is app install dir. We want "app" relative to it.
+    // Ideally we use AppHandle::path_resolver but here we are setting up global state before app runs.
+    // For simplicity in this MVP, we detect if we are in src-tauri (dev) and use parent.
+    // Or just use "app" and accept it's in src-tauri/app in prod?
+    // The issue is strictly dev watcher.
+    
+    // A simple heuristic: check if "tauri.conf.json" exists in CWD. If so, we are in src-tauri.
+    let is_dev = std::path::Path::new("tauri.conf.json").exists();
+    let root_path = if is_dev {
+        std::path::PathBuf::from("..")
+    } else {
+        std::path::PathBuf::from(".")
+    };
+
+    let runtime = runtime::RuntimeManager::new(root_path.clone());
     let _ = runtime.ensure_manifest();
     metrics::init_start();
     let definitions = config::default_services();
-    let log_root = std::path::PathBuf::from("app/logs/services");
-    let service_manager = ServiceManager::new(runtime, definitions, log_root);
-    let config_store = config_store::ConfigStore::new(".");
-    let secrets_store = secrets::SecretsStore::new(".").unwrap_or_else(|err| {
+    let log_root = root_path.join("app/logs/services");
+    let service_manager = ServiceManager::new(runtime.clone(), definitions, log_root);
+    let config_store = config_store::ConfigStore::new(root_path.clone());
+    let secrets_store = secrets::SecretsStore::new(root_path.clone()).unwrap_or_else(|err| {
         eprintln!("secrets init failed: {err}");
         secrets::SecretsStore::new_in_memory()
     });
     let installer = Arc::new(installer::Installer::new());
     let updater = Arc::new(updater::Updater::new());
     let update_progress = Arc::new(Mutex::new(updater::default_progress()));
-    let projects = Arc::new(Mutex::new(projects::ProjectStore::new(".")));
-    let php_config = Arc::new(Mutex::new(config::php::PhpConfigManager::new(".")));
-    let db_manager = Arc::new(Mutex::new(database::DatabaseManager::new(runtime::RuntimeManager::new("."))));
-    let task_manager = Arc::new(Mutex::new(task_manager::TaskManager::new(runtime::RuntimeManager::new("."))));
+    let projects = Arc::new(Mutex::new(projects::ProjectStore::new(root_path.clone())));
+    let php_config = Arc::new(Mutex::new(config::php::PhpConfigManager::new(root_path.clone())));
+    let db_manager = Arc::new(Mutex::new(database::DatabaseManager::new(runtime.clone())));
+    let task_manager = Arc::new(Mutex::new(task_manager::TaskManager::new(runtime)));
 
     if let Ok(app_config) = config_store.load_app_config() {
         telemetry::set_enabled(app_config.telemetry_opt_in);

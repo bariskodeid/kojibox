@@ -1,0 +1,217 @@
+/* Import Fonts first */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;600;800&display=swap');
+
+@import "tailwindcss";
+@import "tailwindcss/preflight" layer(base);
+@import "tailwindcss/utilities" layer(utilities);
+
+:root {
+  /* Industrial Color Palette - Inspired by alvif.bariskode.com */
+  --bg-color: #F3F4F6;       /* Light Concrete */
+  --text-color: #050505;     /* Ink Black */
+  --card-bg: #FFFFFF;
+  --border-color: #000000;   /* Pure Black borders */
+  --accent-color: #FF3C00;   /* Safety Orange (Vibrant) */
+  --accent-hover: #CC3000;
+  --secondary-color: #94A3B8; /* Slate Grey */
+  --success-color: #10B981;  /* Terminal Green */
+  --warning-color: #F59E0B;  /* Caution Yellow */
+  --error-color: #EF4444;    /* Critical Red */
+  --code-bg: #E5E7EB;
+  
+  /* Dimensions */
+  --border-width: 2px;
+  --shadow-offset: 4px;
+  
+  /* Typography */
+  --font-display: "JetBrains Mono", monospace;
+  --font-body: "Inter", sans-serif;
+}
+
+.dark {
+  --bg-color: #0F0F0F;       /* Deep Graphite */
+  --text-color: #E5E5E5;
+  --card-bg: #1A1A1A;
+  --border-color: #555555;
+  --accent-color: #FF9100;   /* Safety Amber */
+  --accent-hover: #FFAB40;
+  --secondary-color: #4B5563;
+  --success-color: #34D399;
+  --warning-color: #FCD34D;
+  --error-color: #F87171;
+  --code-bg: #262626;
+}
+
+@theme {
+  --color-primary: var(--accent-color);
+  --color-secondary: var(--secondary-color);
+  --color-surface: var(--card-bg);
+  --color-background: var(--bg-color);
+  --color-border: var(--border-color);
+  --font-mono: var(--font-display);
+  --font-sans: var(--font-body);
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-body);
+  @apply antialiased m-0 min-h-screen text-sm;
+  background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-opacity: 0.1;
+}
+
+/* --- Industrial Component Library --- */
+
+/* Buttons: Hard edges, distinct borders, offset shadow hover */
+.btn {
+  font-family: var(--font-display);
+  @apply px-5 py-2 font-bold uppercase tracking-wider text-xs transition-all cursor-pointer flex items-center justify-center gap-2;
+  border: var(--border-width) solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--border-color);
+}
+
+.btn:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: calc(var(--shadow-offset) + 2px) calc(var(--shadow-offset) + 2px) 0 var(--border-color);
+  background-color: var(--accent-color);
+  color: #fff;
+  border-color: var(--border-color);
+}
+
+.dark .btn:hover:not(:disabled) {
+    color: #000; /* Contrast on accent */
+}
+
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--border-color);
+}
+
+.btn:disabled {
+  @apply opacity-50 cursor-not-allowed bg-gray-200 border-gray-400 text-gray-500;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-primary {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+}
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--accent-color);
+    color: #fff;
+}
+
+.btn-ghost {
+  background-color: transparent;
+}
+
+/* Inputs: Technical look */
+.input, select {
+  font-family: var(--font-display);
+  @apply px-3 py-2 w-full transition-colors text-sm rounded-none;
+  border: var(--border-width) solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
+.input:focus, select:focus {
+  @apply outline-none ring-0;
+  border-color: var(--accent-color);
+  background-color: var(--code-bg);
+}
+
+/* Cards: Data plates */
+.card {
+  @apply bg-[var(--card-bg)] p-5 relative overflow-hidden;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--border-color);
+}
+
+.heading {
+  font-family: var(--font-display);
+  @apply font-bold uppercase tracking-tight;
+}
+
+.tech-label {
+    font-family: var(--font-display);
+    @apply text-[10px] uppercase font-bold tracking-widest text-[var(--secondary-color)] mb-1 block;
+}
+
+.badge {
+  @apply px-2 py-0.5 text-[10px] font-bold uppercase border border-[var(--border-color)] inline-flex items-center;
+}
+
+/* Layout */
+.app {
+  padding: 32px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.notice {
+  @apply p-4 mb-4 relative;
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--border-color);
+  border-left-width: 6px;
+  border-left-color: var(--success-color);
+}
+
+:root .notice {
+    background: #e8f4e8;
+}
+.dark .notice {
+    background: #1e3320;
+    border-color: #2e7d32;
+}
+
+.notice[data-kind="error"], .error {
+  border-left-color: var(--error-color);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+.dark .notice[data-kind="error"], .dark .error {
+    background: #3e2020;
+}
+
+.notice[data-kind="info"] {
+  border-left-color: var(--accent-color);
+}
+
+.mailpit-frame {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 20px;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+  border-left: var(--border-width) solid var(--border-color);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--secondary-color);
+  border: var(--border-width) solid var(--border-color);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-color);
+}

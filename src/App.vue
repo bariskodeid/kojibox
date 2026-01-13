@@ -32,8 +32,10 @@ import DatabaseInfo from "./components/DatabaseInfo.vue";
 import TaskManager from "./components/TaskManager.vue";
 import ToastContainer, { type Toast } from "./components/ToastContainer.vue";
 import AboutModal from "./components/AboutModal.vue";
+import AppNavigation from "./components/AppNavigation.vue";
 
 // State
+const activeTab = ref("dashboard");
 const services = ref<ServiceState[]>([]);
 const busy = ref<string | null>(null);
 const errorMsg = ref<string | null>(null);
@@ -648,7 +650,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="app">
+  <main class="app max-w-7xl mx-auto">
     <SetupWizard :needs-setup="needsSetup" @setup-complete="onSetupComplete" />
     
     <AppHeader 
@@ -660,217 +662,148 @@ onUnmounted(() => {
       @open-about="showAbout = true"
     />
 
+    <AppNavigation :active-tab="activeTab" @change="activeTab = $event" />
+
     <AboutModal :show="showAbout" version="0.1.0" @close="showAbout = false" />
 
     <ToastContainer :toasts="toasts" @remove="removeToast" />
 
-    <section v-if="diagPath" class="notice">
-      Diagnostics saved to: {{ diagPath }}
+    <section v-if="diagPath" class="notice mb-4">
+      Diagnostics saved to: <code class="font-mono bg-[var(--code-bg)] px-1">{{ diagPath }}</code>
     </section>
 
-    <GlobalConfig 
-        :app-config="appConfig" 
-        :config-error="configError" 
-        @save="saveAppConfig"
-    />
+    <!-- DASHBOARD TAB -->
+    <div v-show="activeTab === 'dashboard'" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AppStatus
+                class="col-span-1 md:col-span-2 lg:col-span-1"
+                :installer-status="installerStatus"
+                :update-status="updateStatus"
+                :update-progress="updateProgress"
+                :metrics="metricsSnapshot"
+                :runtime-manifest="runtimeManifest"
+                :runtime-download-status="runtimeDownloadStatus"
+                v-model:runtime-service="runtimeService"
+                v-model:runtime-version="runtimeVersion"
+                @apply-update="applyUpdate"
+                @start-installer="startInstaller"
+                @ensure-runtime="ensureRuntime"
+                @refresh-runtime="refreshRuntimeManifest"
+            />
+            
+            <!-- Service Cards directly visible on dashboard -->
+            <div class="col-span-1 md:col-span-2 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ServiceCard 
+                    v-for="service in services" 
+                    :key="service.id"
+                    :service="service"
+                    :logs="logsByService[service.id] || []"
+                    :health="healthByService[service.id] || 'unknown'"
+                    :log-filter="logFilter"
+                    :log-path="logPathByService[service.id]"
+                    :busy="busy === service.id"
+                    @start="startService"
+                    @stop="stopService"
+                    @restart="restartService"
+                    @export-logs="exportLogs"
+                    @clear-logs="clearLogs"
+                    @fix-runtime="onFixRuntime"
+                />
+            </div>
+        </div>
 
-    <AppStatus
-        :installer-status="installerStatus"
-        :update-status="updateStatus"
-        :update-progress="updateProgress"
-        :metrics="metricsSnapshot"
-        :runtime-manifest="runtimeManifest"
-        :runtime-download-status="runtimeDownloadStatus"
-        v-model:runtime-service="runtimeService"
-        v-model:runtime-version="runtimeVersion"
-        @apply-update="applyUpdate"
-        @start-installer="startInstaller"
-        @ensure-runtime="ensureRuntime"
-        @refresh-runtime="refreshRuntimeManifest"
-    />
+        <section class="card relative overflow-hidden" v-if="mailpitUrl">
+            <!-- Technical Corner Marker -->
+            <div class="absolute top-0 right-0 p-1 bg-[var(--border-color)]">
+                <div class="w-2 h-2 bg-[var(--accent-color)]"></div>
+            </div>
 
-    <DatabaseInfo 
-        :services="services"
-        :configs="serviceConfigs"
-    />
+            <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+                <h3 class="text-lg font-black uppercase">Mailpit Inspector</h3>
+                <span class="tech-label">MAIL_WEB_UI</span>
+            </div>
+            
+            <iframe class="mailpit-frame w-full h-96 border-2 border-[var(--border-color)] bg-white shadow-inner" :src="mailpitUrl" title="Mailpit"></iframe>
+            
+            <div class="mt-2 flex justify-between items-center">
+                <span class="tech-label !mb-0 italic text-[9px]">// INTERCEPTING LOCAL SMTP TRAFFIC</span>
+                <a :href="mailpitUrl" target="_blank" class="text-[10px] font-mono font-bold uppercase underline hover:text-[var(--accent-color)]">Open in New Tab ↗</a>
+            </div>
+        </section>
 
-    <TaskManager :projects="projects" />
+        <LogViewer 
+            :services="services"
+            :logs-by-service="logsByService"
+            @export="exportViewerLogs"
+        />
+    </div>
 
-    <ProjectManager 
-        :projects="projects"
-        @save="saveProject"
-        @delete="deleteProject"
-    />
+    <!-- PROJECTS TAB -->
+    <div v-show="activeTab === 'projects'" class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ProjectManager 
+                :projects="projects"
+                @save="saveProject"
+                @delete="deleteProject"
+            />
+            <TaskManager 
+                :projects="projects" 
+            />
+        </div>
+    </div>
 
-    <ServiceSettings 
-        :configs="serviceConfigs" 
-        :service-states="services"
-        @save="saveServiceConfig"
-        @apply="applyServiceConfig"
-        @reset="resetServiceConfig"
-        @edit-config="openConfig"
-    />
+    <!-- TOOLING TAB -->
+    <div v-show="activeTab === 'tooling'" class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DatabaseInfo 
+                :services="services"
+                :configs="serviceConfigs"
+            />
+            <ToolingManager
+                :domains="domainMappings"
+                :proxy-rules="proxyRules"
+                :certs="certs"
+                :trust-result="trustResult"
+                @save-domain="saveDomain"
+                @delete-domain="deleteDomain"
+                @apply-hosts="applyHosts"
+                @rollback-hosts="rollbackHosts"
+                @save-proxy="saveProxy"
+                @delete-proxy="deleteProxy"
+                @apply-proxy="applyProxy"
+                @generate-cert="generateCert"
+                @trust-cert="trustCert"
+            />
+        </div>
+    </div>
 
-    <PhpManager @restart-php="restartService('php')" />
-
-    <ToolingManager
-        :domains="domainMappings"
-        :proxy-rules="proxyRules"
-        :certs="certs"
-        :trust-result="trustResult"
-        @save-domain="saveDomain"
-        @delete-domain="deleteDomain"
-        @apply-hosts="applyHosts"
-        @rollback-hosts="rollbackHosts"
-        @save-proxy="saveProxy"
-        @delete-proxy="deleteProxy"
-        @apply-proxy="applyProxy"
-        @generate-cert="generateCert"
-        @trust-cert="trustCert"
-    />
-
-    <LogViewer 
-        :services="services"
-        :logs-by-service="logsByService"
-        @export="exportViewerLogs"
-    />
-
-    <section class="notice" v-if="mailpitUrl">
-      <h3>Mailpit</h3>
-      <iframe class="mailpit-frame" :src="mailpitUrl" title="Mailpit"></iframe>
-    </section>
-
-    <section class="grid">
-      <ServiceCard 
-        v-for="service in services" 
-        :key="service.id"
-        :service="service"
-        :logs="logsByService[service.id] || []"
-        :health="healthByService[service.id] || 'unknown'"
-        :log-filter="logFilter"
-        :log-path="logPathByService[service.id]"
-        :busy="busy === service.id"
-        @start="startService"
-        @stop="stopService"
-        @restart="restartService"
-        @export-logs="exportLogs"
-        @clear-logs="clearLogs"
-        @fix-runtime="onFixRuntime"
-      />
-    </section>
+    <!-- SETTINGS TAB -->
+    <div v-show="activeTab === 'settings'" class="space-y-6">
+        <GlobalConfig 
+            :app-config="appConfig" 
+            :config-error="configError" 
+            @save="saveAppConfig"
+        />
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ServiceSettings 
+                :configs="serviceConfigs" 
+                :service-states="services"
+                @save="saveServiceConfig"
+                @apply="applyServiceConfig"
+                @reset="resetServiceConfig"
+                @edit-config="openConfig"
+            />
+            <PhpManager @restart-php="restartService('php')" />
+        </div>
+    </div>
     
-    <section v-if="errorMsg" class="error">
+    <section v-if="errorMsg" class="error mt-4">
       {{ errorMsg }}
     </section>
   </main>
 </template>
 
 <style>
-:root {
-  --bg-color: #f1f0ea;
-  --text-color: #1b1b1b;
-  --card-bg: #ffffff;
-  --border-color: #1b1b1b;
-  --accent-color: #ffd36a;
-  --secondary-color: #c7e5ff;
-  --ghost-bg: #fefefe;
-  --success-color: #0b7a3e;
-  --warning-color: #c17b1b;
-  --error-color: #b23b3b;
-  --code-bg: #f3f3f3;
-  --hint-color: #5b5b5b;
-  
-  font-family: "Fira Sans", "Trebuchet MS", sans-serif;
-  font-size: 16px;
-  color: var(--text-color);
-  background: var(--bg-color);
-  text-rendering: optimizeLegibility;
-}
-
-.dark {
-  --bg-color: #1a1a1a;
-  --text-color: #e0e0e0;
-  --card-bg: #2a2a2a;
-  --border-color: #4a4a4a;
-  --accent-color: #ffca28;
-  --secondary-color: #3d5afe;
-  --ghost-bg: #2a2a2a;
-  --success-color: #66bb6a;
-  --warning-color: #ffa726;
-  --error-color: #ef5350;
-  --code-bg: #333333;
-  --hint-color: #9e9e9e;
-}
-
-body {
-  margin: 0;
-  background: var(--bg-color);
-  color: var(--text-color);
-}
-
-.app {
-  padding: 32px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.notice {
-  background: var(--card-bg); /* Use card bg for notices in dark mode or lighter variant? */
-  border: 1px solid var(--success-color);
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  color: var(--text-color);
-}
-
-/* Override notice specific colors */
-:root .notice {
-    background: #e8f4e8;
-}
-.dark .notice {
-    background: #1e3320;
-    border-color: #2e7d32;
-}
-
-.notice[data-kind="error"], .error {
-  background: #fbe3e3;
-  border: 1px solid var(--error-color);
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-.dark .notice[data-kind="error"], .dark .error {
-    background: #3e2020;
-}
-
-.notice[data-kind="info"] {
-  border-color: var(--success-color);
-}
-
-.mailpit-frame {
-  width: 100%;
-  min-height: 320px;
-  border: 1px solid var(--border-color);
-  background: #fff;
-}
-
-@media (max-width: 720px) {
-  .app {
-    padding: 20px;
-  }
-}
-
-/* Update generic components to use vars */
-button {
-    color: var(--text-color);
-    border-color: var(--border-color);
-}
-input, select {
-    background: var(--card-bg);
-    color: var(--text-color);
-    border-color: var(--border-color);
-}
+/* Scoped styles removed, using global style.css */
 </style>

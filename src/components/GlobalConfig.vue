@@ -31,79 +31,46 @@ function onSave() {
 </script>
 
 <template>
-  <section class="notice" v-if="localConfig">
-    <div class="config">
-      <div>
-        <label>Install Path</label>
-        <input v-model="localConfig.installPath" />
+  <section class="card" v-if="localConfig">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">System Config</h3>
+        <span class="tech-label">CORE_PREFS</span>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4">
+      <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="tech-label">ROOT_PATH</label>
+            <input v-model="localConfig.installPath" class="input font-mono text-xs" />
+          </div>
+          <div>
+            <label class="tech-label">SCHEMA_VER</label>
+            <input v-model.number="localConfig.schemaVersion" disabled class="input font-mono text-xs opacity-50 cursor-not-allowed" />
+          </div>
       </div>
-      <div>
-        <label>Schema Version</label>
-        <input v-model.number="localConfig.schemaVersion" disabled />
+      
+      <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="tech-label">UPDATE_CHANNEL</label>
+            <select v-model="localConfig.updateChannel" class="input text-xs font-mono uppercase">
+              <option value="stable">STABLE</option>
+              <option value="beta">BETA</option>
+            </select>
+          </div>
+          <div>
+            <label class="tech-label">FEED_URL</label>
+            <input v-model="localConfig.updateFeedUrl" class="input font-mono text-xs" />
+          </div>
       </div>
-      <div>
-        <label>Update Channel</label>
-        <select v-model="localConfig.updateChannel">
-          <option value="stable">stable</option>
-          <option value="beta">beta</option>
-        </select>
-      </div>
-      <div>
-        <label>Update Feed URL</label>
-        <input v-model="localConfig.updateFeedUrl" />
-      </div>
-      <div class="actions-inline">
-        <button class="ghost" @click="onSave">Save Config</button>
+      
+      <div class="flex justify-end pt-2 border-t border-[var(--border-color)] border-dashed">
+        <button class="btn btn-primary" @click="onSave">SAVE CONFIGURATION</button>
       </div>
     </div>
-    <p v-if="configError" class="error-inline">{{ configError }}</p>
+    <p v-if="configError" class="error mt-4 font-mono text-xs">{{ configError }}</p>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.config {
-  display: grid;
-  gap: 8px;
-}
-
-.config label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-input, select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ghost { background: #ffffff; }
-
-.actions-inline {
-  margin-top: 8px;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
+/* Scoped styles removed */
 </style>

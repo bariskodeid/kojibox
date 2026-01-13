@@ -15,68 +15,37 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="toast-container">
+  <div class="fixed bottom-6 right-6 flex flex-col gap-3 z-[1000] pointer-events-none">
     <transition-group name="toast">
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        class="toast"
-        :data-kind="toast.kind"
+        class="pointer-events-auto bg-[var(--card-bg)] border-2 border-[var(--border-color)] p-4 min-w-[300px] shadow-[4px_4px_0_var(--border-color)] cursor-pointer flex items-center gap-3"
+        :class="{
+            'border-[var(--error-color)]': toast.kind === 'error',
+            'border-[var(--success-color)]': toast.kind === 'success'
+        }"
         @click="emit('remove', toast.id)"
       >
-        <span class="message">{{ toast.message }}</span>
+        <div class="w-3 h-3 bg-[var(--text-color)]" :class="{
+            'bg-[var(--error-color)]': toast.kind === 'error',
+            'bg-[var(--success-color)]': toast.kind === 'success',
+            'bg-[var(--accent-color)]': toast.kind === 'info'
+        }"></div>
+        <span class="font-mono text-xs font-bold uppercase tracking-wide">{{ toast.message }}</span>
       </div>
     </transition-group>
   </div>
 </template>
 
 <style scoped>
-.toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.toast {
-  pointer-events: auto;
-  background: #ffffff;
-  border: 2px solid #1b1b1b;
-  padding: 12px 16px;
-  min-width: 280px;
-  box-shadow: 4px 4px 0 #1b1b1b;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.toast[data-kind="error"] {
-  border-color: #d96a6a;
-  background: #fff5f5;
-}
-
-.toast[data-kind="success"] {
-  border-color: #0b7a3e;
-  background: #f0fff4;
-}
-
-.message {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-/* Transitions */
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.2s cubic-bezier(0, 0, 0.2, 1);
 }
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(30px);
+  transform: translateX(50px);
 }
 </style>

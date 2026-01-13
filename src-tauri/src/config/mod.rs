@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub mod php;
 
-fn default_health_check(service_id: &str, port: u16) -> HealthCheck {
+fn default_health_check(_service_id: &str, port: u16) -> HealthCheck {
     HealthCheck {
         kind: "port".to_string(),
         target: format!("127.0.0.1:{}", port),

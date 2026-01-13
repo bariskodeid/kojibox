@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "node",
+  "enabled": true,
+  "version": null,
+  "ports": {
+    "main": 3000
+  },
+  "env": {},
+  "args": []
+}

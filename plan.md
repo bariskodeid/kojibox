@@ -74,3 +74,4 @@ Status: ✅ completed, 🚧 in-progress, ⏳ pending
 - About Page & Third Party Licenses (✅ Implemented).
 - Dark Mode / Theming (✅ Implemented).
 - External Binary Source Configuration (✅ Implemented).
+- Industrial Minimalism Design (✅ Tailwind v4 integrated with Brutalist Industrial theme).

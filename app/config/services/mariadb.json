@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "mariadb",
+  "enabled": true,
+  "version": null,
+  "ports": {
+    "main": 3306
+  },
+  "env": {},
+  "args": []
+}

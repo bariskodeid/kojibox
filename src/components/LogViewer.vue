@@ -55,127 +55,51 @@ function onExport() {
 </script>
 
 <template>
-  <section class="notice">
-    <h3>Log Viewer</h3>
-    <div class="actions-inline">
-      <label>
-        Service
-        <select v-model="logViewerService">
-          <option value="all">all</option>
+  <section class="card">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">Global Logs</h3>
+        <span class="tech-label">SYS_OUT</span>
+    </div>
+
+    <div class="flex gap-4 mb-4 items-end bg-[var(--code-bg)] p-2 border border-[var(--border-color)]">
+      <div class="flex-1">
+        <label class="tech-label">SERVICE_FILTER</label>
+        <select v-model="logViewerService" class="input font-mono uppercase text-xs h-8 py-1">
+          <option value="all">ALL SERVICES</option>
           <option v-for="service in services" :key="service.id" :value="service.id">
-            {{ service.id }}
+            {{ service.id.toUpperCase() }}
           </option>
         </select>
-      </label>
-      <label>
-        Level
-        <select v-model="logViewerLevel">
-          <option value="all">all</option>
-          <option value="info">info</option>
-          <option value="error">error</option>
+      </div>
+      <div class="w-32">
+        <label class="tech-label">LOG_LEVEL</label>
+        <select v-model="logViewerLevel" class="input font-mono uppercase text-xs h-8 py-1">
+          <option value="all">ALL LEVELS</option>
+          <option value="info">INFO</option>
+          <option value="error">ERROR</option>
         </select>
-      </label>
-      <label>
-        Limit
-        <input v-model.number="logViewerLimit" type="number" min="1" />
-      </label>
-      <button class="ghost" @click="onExport">Export Logs</button>
+      </div>
+      <div class="w-24">
+        <label class="tech-label">LIMIT</label>
+        <input v-model.number="logViewerLimit" type="number" min="1" class="input font-mono text-xs h-8 py-1" />
+      </div>
+      <button class="btn h-8" @click="onExport">EXPORT</button>
     </div>
-    <div class="logs viewer">
-      <ul>
-        <li v-for="(entry, index) in viewerEntries" :key="index">
-          <span class="log-ts">{{ formatTs(entry.ts) }}</span>
-          <span class="log-level" :data-level="entry.level">{{ entry.level }}</span>
-          <span class="log-service">[{{ entry.service }}]</span>
-          <span class="log-message">{{ entry.message }}</span>
+
+    <div class="bg-black text-white p-2 border-2 border-[var(--border-color)] h-64 overflow-y-auto font-mono text-[10px] custom-scrollbar shadow-inner">
+      <ul class="space-y-0.5">
+        <li v-for="(entry, index) in viewerEntries" :key="index" class="whitespace-pre-wrap break-all hover:bg-gray-900">
+          <span class="text-gray-500 mr-2">{{ formatTs(entry.ts) }}</span>
+          <span :class="entry.level === 'error' ? 'text-red-500 font-bold' : 'text-green-500'" class="mr-2">[{{ entry.level.toUpperCase() }}]</span>
+          <span class="text-blue-400 mr-2">[{{ entry.service }}]</span>
+          <span class="text-gray-300">{{ entry.message }}</span>
         </li>
+        <li v-if="viewerEntries.length === 0" class="text-gray-600 italic text-center mt-4">// END OF BUFFER</li>
       </ul>
     </div>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.actions-inline {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.actions-inline label {
-  display: block;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-select, input {
-  display: block;
-  margin-top: 4px;
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #ffffff;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-  height: 38px; /* Match input height */
-}
-
-.logs {
-  border-top: 1px dashed #1b1b1b;
-  padding-top: 8px;
-  font-size: 12px;
-  color: #333;
-  margin-top: 12px;
-}
-
-.logs.viewer ul {
-  max-height: 240px;
-  overflow: auto;
-  margin: 0;
-  padding-left: 16px;
-}
-
-.log-ts {
-  color: #777;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level {
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level[data-level="error"] {
-  color: #b23b3b;
-}
-
-.log-level[data-level="info"] {
-  color: #0b7a3e;
-}
-
-.log-service {
-  font-size: 10px;
-  color: #6b6b6b;
-  margin-right: 6px;
-}
-
-.log-message {
-  color: #333;
-}
+/* Scoped styles removed */
 </style>

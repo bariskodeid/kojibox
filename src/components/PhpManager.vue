@@ -36,70 +36,28 @@ onMounted(loadExtensions);
 </script>
 
 <template>
-  <section class="notice">
-    <h3>PHP Extensions</h3>
-    <div class="actions-inline">
-        <button class="ghost" @click="loadExtensions">Refresh</button>
+  <section class="card">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">PHP Modules</h3>
+        <button class="btn btn-sm text-[10px]" @click="loadExtensions">REFRESH</button>
     </div>
     
-    <div class="ext-grid">
-      <label v-for="ext in extensions" :key="ext.name" class="ext-item">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs font-mono">
+      <label v-for="ext in extensions" :key="ext.name" class="flex items-center gap-2 p-2 border border-[var(--border-color)] hover:bg-[var(--code-bg)] cursor-pointer select-none transition-colors">
         <input 
             type="checkbox" 
             :checked="ext.enabled" 
             @change="toggleExtension(ext.name, ($event.target as HTMLInputElement).checked)"
+            class="w-3 h-3 rounded-none border border-[var(--border-color)] text-[var(--accent-color)] focus:ring-0"
         />
-        {{ ext.name }}
+        <span :class="{'font-bold text-[var(--text-color)]': ext.enabled, 'text-[var(--secondary-color)]': !ext.enabled}">{{ ext.name }}</span>
       </label>
     </div>
     
-    <p v-if="errorMsg" class="error-inline">{{ errorMsg }}</p>
+    <p v-if="errorMsg" class="error mt-4 font-mono text-xs">{{ errorMsg }}</p>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.actions-inline {
-    margin-bottom: 12px;
-}
-
-.ext-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.ext-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  background: #fff;
-  padding: 6px;
-  border: 1px solid #ddd;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-  margin-top: 8px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 4px 8px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ghost { background: #ffffff; }
+/* Scoped styles removed */
 </style>

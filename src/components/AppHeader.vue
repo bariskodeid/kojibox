@@ -37,109 +37,58 @@ onMounted(() => {
 </script>
 
 <template>
-  <header class="header">
-    <div>
-      <h1>Kojibox</h1>
-      <p class="subtitle">Portable dev stack manager</p>
+  <header class="flex flex-col md:flex-row items-start md:items-center justify-between border-b-2 border-[var(--border-color)] bg-[var(--card-bg)] p-6 mb-0 sticky top-0 z-50 shadow-md">
+    <div class="mb-4 md:mb-0">
+      <h1 class="text-3xl font-black uppercase tracking-tighter m-0 leading-none">
+        Kojibox<span class="text-[var(--accent-color)]">_</span>
+      </h1>
+      <p class="font-mono text-xs text-[var(--secondary-color)] uppercase tracking-widest mt-1">
+        Portable Dev Environment v0.1.0
+      </p>
     </div>
-    <div class="header-actions">
-      <div class="filter">
+    
+    <div class="flex flex-wrap gap-2 items-center">
+      <div class="flex mr-2 bg-[var(--code-bg)] p-1 border border-[var(--border-color)]">
         <button
-          class="ghost"
-          :data-active="logFilter === 'all'"
+          class="px-3 py-1 text-xs font-bold uppercase transition-colors"
+          :class="logFilter === 'all' ? 'bg-[var(--text-color)] text-[var(--bg-color)]' : 'text-[var(--text-color)] hover:bg-[var(--secondary-color)]'"
           @click="emit('update:logFilter', 'all')"
         >
-          All Logs
+          ALL LOGS
         </button>
         <button
-          class="ghost"
-          :data-active="logFilter === 'error'"
+          class="px-3 py-1 text-xs font-bold uppercase transition-colors"
+          :class="logFilter === 'error' ? 'bg-[var(--error-color)] text-white' : 'text-[var(--text-color)] hover:bg-[var(--secondary-color)]'"
           @click="emit('update:logFilter', 'error')"
         >
-          Errors
+          ERRORS
         </button>
       </div>
-      <button class="ghost" @click="toggleDark">{{ isDark ? '☀' : '🌙' }}</button>
-      <button class="ghost" @click="emit('open-terminal')">Terminal</button>
-      <button class="ghost" @click="emit('refresh')">Refresh</button>
-      <div class="dropdown">
-          <button class="ghost">Menu ▼</button>
-          <div class="dropdown-content">
-              <a @click="emit('check-updates')">Check Updates</a>
-              <a @click="emit('export-diagnostics')">Export Diagnostics</a>
-              <a @click="emit('open-about')">About</a>
-          </div>
+
+      <button class="btn btn-ghost border-2 border-[var(--border-color)] px-3" @click="toggleDark" title="Toggle Theme">
+        {{ isDark ? '☀' : '☾' }}
+      </button>
+      
+      <button class="btn" @click="emit('open-terminal')">
+        <span class="font-mono">>_</span> TERM
+      </button>
+      
+      <button class="btn" @click="emit('refresh')">
+        REFRESH
+      </button>
+      
+      <div class="dropdown relative group">
+        <button class="btn">MENU ▼</button>
+        <div class="absolute right-0 mt-0 w-48 bg-[var(--card-bg)] border-2 border-[var(--border-color)] shadow-[4px_4px_0_var(--border-color)] hidden group-hover:block z-50">
+            <a class="block px-4 py-3 text-xs font-bold uppercase border-b border-[var(--border-color)] hover:bg-[var(--accent-color)] hover:text-white cursor-pointer transition-colors" @click="emit('check-updates')">Check Updates</a>
+            <a class="block px-4 py-3 text-xs font-bold uppercase border-b border-[var(--border-color)] hover:bg-[var(--accent-color)] hover:text-white cursor-pointer transition-colors" @click="emit('export-diagnostics')">Export Diag</a>
+            <a class="block px-4 py-3 text-xs font-bold uppercase hover:bg-[var(--accent-color)] hover:text-white cursor-pointer transition-colors" @click="emit('open-about')">About</a>
+        </div>
       </div>
     </div>
   </header>
 </template>
 
 <style scoped>
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 2px solid var(--border-color);
-  padding-bottom: 16px;
-  margin-bottom: 24px;
-}
-
-.subtitle {
-  margin: 4px 0 0;
-  color: var(--hint-color);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.filter {
-  display: flex;
-  gap: 8px;
-}
-
-.filter button[data-active="true"] {
-  background: var(--border-color);
-  color: var(--bg-color); /* Invert for contrast */
-}
-
-button {
-  border: 2px solid var(--border-color);
-  background: var(--ghost-bg);
-  color: var(--text-color);
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-.dropdown-content {
-  display: none;
-  position: absolute;
-  right: 0;
-  background-color: var(--card-bg);
-  min-width: 160px;
-  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-  z-index: 1;
-  border: 1px solid var(--border-color);
-}
-
-.dropdown-content a {
-  color: var(--text-color);
-  padding: 12px 16px;
-  text-decoration: none;
-  display: block;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.dropdown-content a:hover {background-color: var(--code-bg);}
-
-.dropdown:hover .dropdown-content {display: block;}
+/* Scoped styles removed in favor of Tailwind classes */
 </style>

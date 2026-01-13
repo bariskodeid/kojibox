@@ -46,10 +46,6 @@ function isUpdateRunning() {
   return !!(props.updateProgress && props.updateProgress.phase !== "idle" && props.updateProgress.phase !== "complete");
 }
 
-function isInstallerRunning() {
-  return !!(props.installerStatus && props.installerStatus.phase !== "idle" && props.installerStatus.phase !== "complete");
-}
-
 function onEnsureRuntime() {
     emit("ensure-runtime", props.runtimeService, props.runtimeVersion);
 }
@@ -57,196 +53,95 @@ function onEnsureRuntime() {
 </script>
 
 <template>
-  <div>
-    <!-- Update Status -->
-    <section v-if="updateStatus" class="notice">
-      Update: {{
-        updateStatus.available
-          ? `available ${updateStatus.version}`
-          : "up to date"
-      }}
-    </section>
-
-    <!-- Update Progress -->
-    <section class="notice" v-if="updateProgress">
-      Update progress: {{ updateProgress.phase }} ({{
-        Math.round(updateProgress.progress * 100)
-      }}%)
-      <button class="ghost" :disabled="isUpdateRunning()" @click="emit('apply-update')">Apply Update</button>
-      <div class="progress">
-        <div class="progress-bar" :style="{ width: `${updateProgress.progress * 100}%` }"></div>
+  <div class="space-y-4">
+    <!-- Runtime Management -->
+    <section class="card" id="runtime-section">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">Runtime Control</h3>
+          <span class="tech-label">SYS_RT</span>
       </div>
-    </section>
+      
+      <div class="grid grid-cols-1 gap-4">
+        <div>
+            <span class="tech-label mb-1">SERVICE_SELECT</span>
+            <select :value="runtimeService" @change="emit('update:runtimeService', ($event.target as HTMLSelectElement).value)">
+              <option value="php">PHP</option>
+              <option value="node">NODE</option>
+              <option value="postgres">POSTGRES</option>
+              <option value="mariadb">MARIADB</option>
+              <option value="mailpit">MAILPIT</option>
+            </select>
+        </div>
+        
+        <div>
+            <span class="tech-label mb-1">TARGET_VERSION</span>
+            <div class="flex gap-2">
+                <input class="input font-mono" :value="runtimeVersion" @input="emit('update:runtimeVersion', ($event.target as HTMLInputElement).value)" placeholder="ex: 8.3.2" list="version-list" />
+                <datalist id="version-list">
+                    <option v-for="v in availableVersions" :key="v" :value="v" />
+                </datalist>
+            </div>
+        </div>
 
-    <!-- Installer Status -->
-    <section class="notice" v-if="installerStatus">
-      Installer: {{ installerStatus.phase }} ({{ Math.round(installerStatus.progress * 100) }}%)
-      <button class="ghost" :disabled="isInstallerRunning()" @click="emit('start-installer')">
-        Run Installer
-      </button>
-      <div class="progress">
-        <div class="progress-bar" :style="{ width: `${installerStatus.progress * 100}%` }"></div>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+            <button class="btn" @click="onEnsureRuntime">Ensure</button>
+            <button class="btn" @click="emit('refresh-runtime')">Sync Manifest</button>
+        </div>
+      </div>
+      
+      <div v-if="runtimeDownloadStatus" class="mt-4 p-2 border border-[var(--border-color)] bg-[var(--code-bg)]">
+        <div class="flex justify-between text-xs font-mono mb-1">
+          <span class="uppercase font-bold">{{ runtimeDownloadStatus.phase }}</span>
+          <span v-if="runtimeDownloadStatus.service">[{{ runtimeDownloadStatus.service }}]</span>
+        </div>
+        <div class="h-2 w-full bg-[var(--card-bg)] border border-[var(--border-color)]">
+          <div class="h-full bg-[var(--accent-color)] transition-all duration-200" :style="{ width: `${runtimeDownloadStatus.progress * 100}%` }"></div>
+        </div>
+        <p v-if="runtimeDownloadStatus.error" class="text-[var(--error-color)] text-xs font-mono mt-1">> ERROR: {{ runtimeDownloadStatus.error }}</p>
       </div>
     </section>
 
     <!-- Metrics -->
-    <section class="notice" v-if="metrics">
-      <h3>Metrics</h3>
-      <div class="metrics-grid">
+    <section class="card" v-if="metrics">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">Telemetry</h3>
+          <span class="tech-label">METRICS</span>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <strong>Uptime</strong>
-          <p>{{ metrics.uptimeSec }}s</p>
+          <span class="tech-label">UPTIME</span>
+          <p class="font-mono text-xl font-bold">{{ metrics.uptimeSec }}s</p>
         </div>
         <div>
-          <strong>CPU</strong>
-          <p>{{ metrics.cpuPercent.toFixed(1) }}%</p>
+          <span class="tech-label">LOAD</span>
+          <p class="font-mono text-xl font-bold">{{ metrics.cpuPercent.toFixed(1) }}%</p>
         </div>
         <div>
-          <strong>Memory</strong>
-          <p>{{ metrics.memMB }} MB</p>
+          <span class="tech-label">MEM</span>
+          <p class="font-mono text-xl font-bold">{{ metrics.memMB }} MB</p>
         </div>
         <div>
-          <strong>Ports</strong>
-          <p>{{ metrics.portsInUse.join(", ") || "none" }}</p>
+          <span class="tech-label">PORTS</span>
+          <p class="font-mono text-xs truncate" :title="metrics.portsInUse.join(', ')">{{ metrics.portsInUse.length }} active</p>
         </div>
       </div>
     </section>
 
-    <!-- Runtime Management -->
-    <section class="notice" id="runtime-section">
-      <h3>Runtime</h3>
-      <div class="project-form">
-        <select :value="runtimeService" @change="emit('update:runtimeService', ($event.target as HTMLSelectElement).value)">
-          <option value="php">php</option>
-          <option value="node">node</option>
-          <option value="postgres">postgres</option>
-          <option value="mariadb">mariadb</option>
-          <option value="mailpit">mailpit</option>
-        </select>
-        
-        <div class="version-input-group">
-            <input :value="runtimeVersion" @input="emit('update:runtimeVersion', ($event.target as HTMLInputElement).value)" placeholder="version" list="version-list" />
-            <datalist id="version-list">
-                <option v-for="v in availableVersions" :key="v" :value="v" />
-            </datalist>
+    <!-- Update Status -->
+    <section v-if="updateStatus && updateStatus.available" class="notice" data-kind="info">
+        <div class="flex justify-between items-center">
+            <span class="font-bold uppercase">Update Available</span>
+            <span class="font-mono bg-[var(--accent-color)] text-white px-2 py-0.5 text-xs">{{ updateStatus.version }}</span>
         </div>
-
-        <div class="actions">
-            <button class="ghost" @click="onEnsureRuntime">Ensure Service</button>
-            <button class="ghost" @click="emit('refresh-runtime')">Refresh Manifest</button>
+        <div v-if="updateProgress" class="mt-2">
+             <div class="text-xs font-mono mb-1 uppercase">{{ updateProgress.phase }}</div>
+             <div class="h-1 w-full bg-white/50"><div class="h-full bg-black" :style="{ width: `${updateProgress.progress * 100}%` }"></div></div>
         </div>
-      </div>
-      
-      <div v-if="runtimeDownloadStatus" class="runtime-progress">
-        <div class="progress-label">
-          runtime: {{ runtimeDownloadStatus.phase }}
-          <span v-if="runtimeDownloadStatus.service">
-            ({{ runtimeDownloadStatus.service }})
-          </span>
-        </div>
-        <div class="progress">
-          <div class="progress-bar" :style="{ width: `${runtimeDownloadStatus.progress * 100}%` }"></div>
-        </div>
-        <p v-if="runtimeDownloadStatus.error" class="error-inline">{{ runtimeDownloadStatus.error }}</p>
-      </div>
-
-      <details class="service-json" v-if="runtimeManifest">
-        <summary>Show Manifest</summary>
-        <pre>{{ JSON.stringify(runtimeManifest, null, 2) }}</pre>
-      </details>
+        <button v-else class="btn btn-sm mt-2 w-full" :disabled="isUpdateRunning()" @click="emit('apply-update')">INSTALL UPDATE</button>
     </section>
   </div>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.progress {
-  height: 6px;
-  background: #d8ead8;
-  margin-top: 8px;
-  border: 1px solid #6fb56f;
-}
-
-.progress-bar {
-  height: 100%;
-  background: #3d8b3d;
-  transition: width 0.2s ease;
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-}
-
-.metrics-grid p {
-  margin: 6px 0 0;
-  font-size: 13px;
-}
-
-.project-form {
-    display: grid;
-    gap: 6px;
-}
-
-.actions {
-    display: flex;
-    gap: 8px;
-}
-
-input, select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ghost { background: #ffffff; }
-
-.service-json {
-    margin-top: 12px;
-}
-
-.service-json pre {
-  background: #f3f3f3;
-  border: 1px solid #d0d0d0;
-  padding: 8px;
-  overflow: auto;
-  max-height: 160px;
-  font-size: 12px;
-}
-
-.progress-label {
-  font-size: 11px;
-  margin: 8px 0 4px;
-  text-transform: uppercase;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.runtime-progress {
-    margin-top: 12px;
-}
+/* Styles replaced by global classes */
 </style>

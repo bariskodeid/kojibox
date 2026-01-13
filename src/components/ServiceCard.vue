@@ -40,235 +40,96 @@ function formatTs(ts: string) {
 </script>
 
 <template>
-  <article class="card">
-    <div class="card-head">
-      <div>
-        <h2>{{ service.id }}</h2>
-        <p class="status" :data-state="service.state">{{ service.state }}</p>
-      </div>
-      <span class="pid" v-if="service.pid">pid {{ service.pid }}</span>
+  <article class="card group relative">
+    <!-- Technical Corner Marker -->
+    <div class="absolute top-0 right-0 p-1 bg-[var(--border-color)]">
+        <div class="w-2 h-2 bg-[var(--accent-color)]"></div>
     </div>
-    <p class="health" :data-health="health">
-      health: {{ health || "unknown" }}
+
+    <div class="card-head mb-4 border-b-2 border-[var(--border-color)] pb-2 flex justify-between items-end">
+      <div>
+        <span class="tech-label">SERVICE_ID</span>
+        <h2 class="text-2xl font-black uppercase tracking-tighter">{{ service.id }}</h2>
+      </div>
+      <div class="text-right">
+        <span class="tech-label">STATUS</span>
+        <p class="status font-mono font-bold uppercase" :data-state="service.state">
+            <span class="w-2 h-2 inline-block mr-1 rounded-none" :class="{
+                'bg-green-500': service.state === 'running',
+                'bg-yellow-500': service.state === 'starting',
+                'bg-red-500': service.state === 'stopped' || service.state === 'error'
+            }"></span>
+            {{ service.state }}
+        </p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+            <span class="tech-label">PID</span>
+            <span class="font-mono text-sm">{{ service.pid || '---' }}</span>
+        </div>
+        <div>
+            <span class="tech-label">HEALTH</span>
+            <span class="font-mono text-sm" :class="health === 'ok' ? 'text-[var(--success-color)]' : 'text-[var(--error-color)]'">
+                {{ health || "UNKNOWN" }}
+            </span>
+        </div>
+    </div>
+
+    <p v-if="service.lastError" class="error mb-4 font-mono text-xs p-2 border-l-4 border-[var(--error-color)] bg-[var(--code-bg)]">
+      ERR: {{ service.lastError }}
     </p>
-    <p v-if="service.lastError" class="error-inline">
-      {{ service.lastError }}
-    </p>
-    <div class="actions">
-      <button v-if="isBinaryError" class="secondary" @click="emit('fix-runtime', service.id)">
-          Fix Runtime
-      </button>
+
+    <div class="actions grid grid-cols-3 gap-2 mb-4">
       <button
-        class="primary"
+        class="btn col-span-1"
+        :class="{ 'bg-[var(--success-color)] text-white border-transparent': service.state !== 'running' }"
         :disabled="busy"
         @click="emit('start', service.id)"
       >
         Start
       </button>
       <button
-        class="secondary"
+        class="btn col-span-1"
         :disabled="busy"
         @click="emit('stop', service.id)"
       >
         Stop
       </button>
       <button
-        class="ghost"
+        class="btn col-span-1"
         :disabled="busy"
         @click="emit('restart', service.id)"
       >
-        Restart
+        Rst
+      </button>
+      <button v-if="isBinaryError" class="btn col-span-3 border-[var(--error-color)] text-[var(--error-color)]" @click="emit('fix-runtime', service.id)">
+          ⚠ Fix Runtime
       </button>
     </div>
-    <div class="logs">
-      <div class="logs-head">
-        <p class="logs-title">Recent logs</p>
-        <div class="log-actions">
-            <button class="ghost small" @click="emit('clear-logs', service.id)">Clear</button>
-            <button class="ghost small" @click="emit('export-logs', service.id)">Export</button>
+
+    <div class="logs bg-[var(--code-bg)] border-2 border-[var(--border-color)] p-2">
+      <div class="logs-head flex justify-between items-center mb-2 border-b border-[var(--border-color)] pb-1">
+        <p class="logs-title font-mono text-[10px] uppercase font-bold text-[var(--secondary-color)]">STDOUT_STREAM</p>
+        <div class="log-actions flex gap-1">
+            <button class="px-1 py-0.5 text-[9px] uppercase border border-[var(--border-color)] hover:bg-[var(--accent-color)] hover:text-white" @click="emit('clear-logs', service.id)">CLR</button>
+            <button class="px-1 py-0.5 text-[9px] uppercase border border-[var(--border-color)] hover:bg-[var(--accent-color)] hover:text-white" @click="emit('export-logs', service.id)">EXP</button>
         </div>
       </div>
-      <p class="logs-path" v-if="logPath">File: {{ logPath }}</p>
-      <ul>
-        <li v-for="(entry, index) in filteredLogs" :key="index">
-          <span class="log-ts">{{ formatTs(entry.ts) }}</span>
-          <span class="log-level" :data-level="entry.level">{{
-            entry.level
-          }}</span>
-          <span class="log-message">{{ entry.message }}</span>
+      <p class="logs-path font-mono text-[9px] text-[var(--secondary-color)] mb-1 truncate" v-if="logPath">PATH: {{ logPath }}</p>
+      <ul class="font-mono text-[10px] h-24 overflow-y-auto custom-scrollbar">
+        <li v-for="(entry, index) in filteredLogs" :key="index" class="mb-0.5 whitespace-pre-wrap leading-tight">
+          <span class="text-[var(--secondary-color)] mr-1">{{ formatTs(entry.ts) }}</span>
+          <span :class="entry.level === 'error' ? 'text-[var(--error-color)]' : 'text-[var(--success-color)]'" class="font-bold mr-1">[{{ entry.level }}]</span>
+          <span class="text-[var(--text-color)]">{{ entry.message }}</span>
         </li>
+        <li v-if="filteredLogs.length === 0" class="text-[var(--secondary-color)] opacity-50 italic">// No output</li>
       </ul>
     </div>
   </article>
 </template>
 
 <style scoped>
-.card {
-  background: #ffffff;
-  border: 2px solid #1b1b1b;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 4px 4px 0 #1b1b1b;
-}
-
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.status {
-  margin: 6px 0 0;
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 12px;
-}
-
-.status[data-state="running"] {
-  color: #0b7a3e;
-}
-
-.status[data-state="starting"] {
-  color: #c17b1b;
-}
-
-.status[data-state="stopped"] {
-  color: #b23b3b;
-}
-
-.pid {
-  font-size: 12px;
-  color: #5b5b5b;
-}
-
-.health {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #4a4a4a;
-}
-
-.health[data-health="ok"] {
-  color: #0b7a3e;
-}
-
-.health[data-health="error"] {
-  color: #b23b3b;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.primary {
-  background: #ffd36a;
-}
-
-.secondary {
-  background: #c7e5ff;
-}
-
-.ghost {
-  background: #ffffff;
-}
-
-.logs {
-  border-top: 1px dashed #1b1b1b;
-  padding-top: 8px;
-  font-size: 12px;
-  color: #333;
-}
-
-.logs-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.log-actions {
-    display: flex;
-    gap: 4px;
-}
-
-.logs-title {
-  margin: 0 0 6px;
-  text-transform: uppercase;
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-button.small {
-    padding: 2px 6px;
-    font-size: 10px;
-}
-
-.logs-path {
-  margin: 0 0 6px;
-  font-size: 10px;
-  color: #666;
-}
-
-.logs ul {
-  margin: 0;
-  padding-left: 16px;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.log-ts {
-  color: #777;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level {
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 10px;
-  margin-right: 6px;
-}
-
-.log-level[data-level="error"] {
-  color: #b23b3b;
-}
-
-.log-level[data-level="info"] {
-  color: #0b7a3e;
-}
-
-.log-service {
-  font-size: 10px;
-  color: #6b6b6b;
-  margin-right: 6px;
-}
-
-.log-message {
-  color: #333;
-}
+/* Scoped styles replaced by Tailwind classes in template */
 </style>

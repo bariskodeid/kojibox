@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 
 use base64::{engine::general_purpose, Engine as _};
 use ed25519_dalek::{Signature, VerifyingKey};
-use rand::RngCore;
 use reqwest::blocking::Client;
 use semver::Version;
 

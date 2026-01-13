@@ -136,157 +136,87 @@ function prevWizard() {
 </script>
 
 <template>
-  <div v-if="needsSetup" class="wizard-backdrop">
-    <section class="wizard">
-      <header>
-        <h2>First Run Setup</h2>
-        <p>Set install path, ports, and default services.</p>
+  <div v-if="needsSetup" class="fixed inset-0 bg-black/80 grid place-items-center z-[2000]">
+    <section class="card w-full max-w-lg shadow-[8px_8px_0_var(--accent-color)] border-[var(--accent-color)]">
+      <header class="mb-6 border-b-2 border-[var(--border-color)] pb-4">
+        <h2 class="text-3xl font-black uppercase mb-1">Initial Setup</h2>
+        <p class="font-mono text-xs text-[var(--secondary-color)] uppercase tracking-widest">System Configuration Wizard</p>
       </header>
       
       <!-- Step 1: Basic Config -->
-      <div v-if="wizardStep === 1" class="wizard-step">
-        <label>
-          Install Path
-          <input v-model="wizardConfig.installPath" placeholder="app" />
-        </label>
-        <label>
-          Update Channel
-          <select v-model="wizardConfig.updateChannel">
-            <option value="stable">stable</option>
-            <option value="beta">beta</option>
-          </select>
-        </label>
-        <label>
-          Update Feed URL
-          <input v-model="wizardConfig.updateFeedUrl" />
-        </label>
-        <label class="inline">
-          <input type="checkbox" v-model="wizardConfig.telemetryOptIn" />
-          Allow telemetry (opt-in)
-        </label>
+      <div v-if="wizardStep === 1" class="space-y-4">
+        <div>
+            <label class="tech-label">INSTALL_ROOT</label>
+            <input v-model="wizardConfig.installPath" placeholder="app" class="input font-mono" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="tech-label">UPDATE_CHANNEL</label>
+                <select v-model="wizardConfig.updateChannel" class="input font-mono uppercase">
+                  <option value="stable">STABLE</option>
+                  <option value="beta">BETA</option>
+                </select>
+            </div>
+            <div>
+                <label class="tech-label">TELEMETRY</label>
+                <label class="flex items-center gap-2 h-full cursor-pointer border border-[var(--border-color)] px-3 bg-[var(--code-bg)] hover:bg-white transition-colors">
+                  <input type="checkbox" v-model="wizardConfig.telemetryOptIn" class="w-4 h-4 rounded-none border-2 border-black text-[var(--accent-color)] focus:ring-0" />
+                  <span class="font-bold text-xs uppercase">OPT-IN ENABLED</span>
+                </label>
+            </div>
+        </div>
+        <div>
+            <label class="tech-label">FEED_URL</label>
+            <input v-model="wizardConfig.updateFeedUrl" class="input font-mono text-xs" />
+        </div>
       </div>
 
       <!-- Step 2: Ports -->
-      <div v-else-if="wizardStep === 2" class="wizard-step">
-        <h3>Default Ports</h3>
-        <div class="wizard-grid">
-          <label v-for="(_port, id) in wizardPorts" :key="id">
-            {{ id }}
-            <input v-model.number="wizardPorts[id]" type="number" min="1" max="65535" />
+      <div v-else-if="wizardStep === 2" class="space-y-4">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-bold uppercase">Port Assignment</h3>
+            <span class="tech-label">NET_CONFIG</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label v-for="(_port, id) in wizardPorts" :key="id" class="border border-[var(--border-color)] p-2 flex justify-between items-center bg-[var(--code-bg)]">
+            <span class="font-bold text-xs uppercase">{{ id }}</span>
+            <input v-model.number="wizardPorts[id]" type="number" min="1" max="65535" class="w-20 text-right font-mono text-xs border-b border-black bg-transparent focus:outline-none" />
           </label>
         </div>
       </div>
 
       <!-- Step 3: Services -->
-      <div v-else class="wizard-step">
-        <h3>Enable Services</h3>
-        <div class="wizard-grid">
-          <label v-for="(_enabled, id) in wizardServices" :key="id" class="inline">
-            <input type="checkbox" v-model="wizardServices[id]" />
-            {{ id }}
+      <div v-else class="space-y-4">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-bold uppercase">Service Selection</h3>
+            <span class="tech-label">DAEMON_LIST</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label v-for="(_enabled, id) in wizardServices" :key="id" class="flex items-center gap-3 p-3 border border-[var(--border-color)] cursor-pointer hover:bg-[var(--code-bg)] transition-colors select-none">
+            <input type="checkbox" v-model="wizardServices[id]" class="w-5 h-5 rounded-none border-2 border-black text-[var(--accent-color)] focus:ring-0" />
+            <span class="font-bold uppercase text-sm">{{ id }}</span>
           </label>
         </div>
       </div>
 
-      <p class="error" v-if="wizardError">{{ wizardError }}</p>
+      <p class="error mt-4 font-mono text-xs border-l-4 border-[var(--error-color)] bg-red-50 p-2" v-if="wizardError">
+          ERR: {{ wizardError }}
+      </p>
 
-      <footer class="wizard-actions">
-        <button class="ghost" :disabled="wizardStep === 1" @click="prevWizard">Back</button>
-        <button class="secondary" v-if="wizardStep < 3" @click="nextWizard">Next</button>
-        <button class="primary" v-else @click="finishWizard">Finish</button>
+      <footer class="flex justify-between mt-8 pt-4 border-t-2 border-[var(--border-color)] border-dashed">
+        <button class="btn w-24" :disabled="wizardStep === 1" @click="prevWizard">BACK</button>
+        
+        <div class="flex gap-1">
+            <div v-for="i in 3" :key="i" class="w-3 h-3 border border-black" :class="i === wizardStep ? 'bg-[var(--accent-color)]' : 'bg-transparent'"></div>
+        </div>
+
+        <button class="btn btn-primary w-24" v-if="wizardStep < 3" @click="nextWizard">NEXT</button>
+        <button class="btn btn-primary w-24 bg-[var(--success-color)] text-white border-[var(--success-color)] hover:bg-green-600" v-else @click="finishWizard">FINISH</button>
       </footer>
     </section>
   </div>
 </template>
 
 <style scoped>
-.wizard-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 17, 17, 0.65);
-  display: grid;
-  place-items: center;
-  z-index: 20;
-  padding: 20px;
-}
-
-.wizard {
-  background: #ffffff;
-  border: 2px solid #1b1b1b;
-  padding: 20px;
-  max-width: 560px;
-  width: 100%;
-  display: grid;
-  gap: 12px;
-}
-
-.wizard h2 {
-  margin: 0 0 4px;
-}
-
-.wizard-step {
-    display: grid;
-    gap: 12px;
-}
-
-.wizard-step label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.wizard-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-}
-
-.wizard-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.primary {
-  background: #ffd36a;
-}
-
-.secondary {
-  background: #c7e5ff;
-}
-
-.ghost {
-  background: #ffffff;
-}
-
-.error {
-  background: #fbe3e3;
-  border: 1px solid #d96a6a;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-input,
-select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+/* Scoped styles removed */
 </style>

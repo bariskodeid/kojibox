@@ -62,88 +62,37 @@ async function exportDb(serviceId: string, dbName: string) {
 </script>
 
 <template>
-  <section class="notice" v-if="databases.length">
-    <h3>Database Connections</h3>
-    <div class="db-grid">
-      <div v-for="db in databases" :key="db.id" class="db-card">
-        <h4>{{ db.name }}</h4>
-        <div class="db-detail">
-          <span>Host:</span> <strong>127.0.0.1</strong>
+  <section class="card" v-if="databases.length">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">Data Access</h3>
+        <span class="tech-label">SQL_CONN</span>
+    </div>
+    
+    <div class="grid grid-cols-1 gap-4">
+      <div v-for="db in databases" :key="db.id" class="border border-[var(--border-color)] p-3 bg-[var(--code-bg)]">
+        <div class="flex justify-between items-center mb-2">
+            <h4 class="font-bold uppercase tracking-tight">{{ db.name }}</h4>
+            <span class="tech-label text-[var(--success-color)]">ONLINE</span>
         </div>
-        <div class="db-detail">
-          <span>Port:</span> <strong>{{ db.port }}</strong>
+        
+        <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs font-mono mb-3">
+          <span class="text-[var(--secondary-color)]">HOST</span> <span>127.0.0.1</span>
+          <span class="text-[var(--secondary-color)]">PORT</span> <span>{{ db.port }}</span>
+          <span class="text-[var(--secondary-color)]">USER</span> <span>{{ db.user }}</span>
+          <span class="text-[var(--secondary-color)]">PASS</span> <span>{{ db.pass }}</span>
         </div>
-        <div class="db-detail">
-          <span>User:</span> <strong>{{ db.user }}</strong>
-        </div>
-        <div class="db-detail">
-          <span>Pass:</span> <strong>{{ db.pass }}</strong>
-        </div>
-        <div class="db-actions">
-            <button class="ghost small" @click="copyToClipboard(db.connString)">Copy Connection String</button>
-            <a :href="db.connString" target="_blank" class="button ghost small">Open in Client</a>
-            <button class="secondary small" @click="exportDb(db.id, db.db)">Export SQL</button>
+        
+        <div class="grid grid-cols-2 gap-2">
+            <button class="btn btn-sm text-[10px]" @click="copyToClipboard(db.connString)">COPY DSN</button>
+            <a :href="db.connString" target="_blank" class="btn btn-sm text-[10px] text-center decoration-none">OPEN CLIENT</a>
+            <button class="btn btn-sm text-[10px] col-span-2 border-dashed" @click="exportDb(db.id, db.db)">EXPORT .SQL</button>
         </div>
       </div>
     </div>
-    <p v-if="errorMsg" class="error-inline">{{ errorMsg }}</p>
+    <p v-if="errorMsg" class="error mt-4">{{ errorMsg }}</p>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.db-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.db-card {
-  background: #fff;
-  border: 1px solid #ccc;
-  padding: 12px;
-}
-
-.db-card h4 {
-  margin: 0 0 8px;
-  text-transform: uppercase;
-  font-size: 12px;
-}
-
-.db-detail {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-
-.db-actions {
-    display: grid;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-button, .button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 4px 8px;
-  font-weight: 600;
-  cursor: pointer;
-  width: 100%;
-  text-align: center;
-  text-decoration: none;
-  display: block;
-  font-size: 11px;
-  color: #1b1b1b;
-  box-sizing: border-box;
-}
-
-.ghost { background: #ffffff; }
+/* Scoped styles removed */
 </style>

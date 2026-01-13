@@ -186,210 +186,97 @@ function addEnvRow(id: string) {
 </script>
 
 <template>
-  <section class="notice">
-    <h3>Service Settings</h3>
-    <div class="actions-inline">
-      <button class="ghost" @click="saveAll">Save All Changes</button>
+  <section class="card">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">Service Config</h3>
+        <span class="tech-label">DAEMON_OPT</span>
     </div>
     
-    <div class="project-form" v-if="configs.length">
-      <div v-for="config in configs" :key="config.id" class="service-block">
-        <div class="service-head">
-            <strong>{{ config.id }}</strong>
-            <span
-              v-if="findServiceState(config.id)"
-              class="status"
-              :data-state="findServiceState(config.id)?.state"
-            >
-              {{ findServiceState(config.id)?.state }}
-            </span>
-            <span v-if="applyWithoutRestart[config.id]" class="hint">no-restart</span>
+    <div class="actions-inline mb-4 flex justify-end">
+      <button class="btn" @click="saveAll">Save All Changes</button>
+    </div>
+    
+    <div v-if="configs.length" class="space-y-4">
+      <div v-for="config in configs" :key="config.id" class="border border-[var(--border-color)] p-3 bg-[var(--code-bg)]">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-[var(--border-color)] border-dashed">
+            <div class="flex items-center gap-2">
+                <strong class="uppercase">{{ config.id }}</strong>
+                <span
+                  v-if="findServiceState(config.id)"
+                  class="badge"
+                  :class="{
+                      'bg-green-100 text-green-800 border-green-800': findServiceState(config.id)?.state === 'running',
+                      'bg-red-100 text-red-800 border-red-800': findServiceState(config.id)?.state !== 'running'
+                  }"
+                >
+                  {{ findServiceState(config.id)?.state }}
+                </span>
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" v-model="applyWithoutRestart[config.id]" class="w-3 h-3 border-[var(--border-color)]" />
+                    <span class="tech-label !mb-0 text-[9px]">HOT_APPLY</span>
+                </label>
+                <span v-if="serviceDirty[config.id]" class="badge bg-[var(--warning-color)] border-black">UNSAVED</span>
+            </div>
         </div>
 
-        <details class="service-json">
-          <summary>Show JSON</summary>
-          <pre>{{ JSON.stringify(config, null, 2) }}</pre>
-        </details>
-        
-        <div class="service-config">
-          <label>Enabled</label>
-          <input type="checkbox" v-model="config.enabled" @change="markDirty(config.id)" />
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-2 flex items-center gap-2">
+                <input type="checkbox" v-model="config.enabled" @change="markDirty(config.id)" class="w-4 h-4 border-2 border-[var(--border-color)]" />
+                <span class="font-bold text-xs uppercase">Enabled</span>
+            </div>
+            <div class="col-span-3">
+                <div class="flex items-center">
+                    <span class="tech-label mr-2">PORT</span>
+                    <input v-model.number="config.ports.main" @input="markDirty(config.id)" class="input py-1 text-xs font-mono w-full" />
+                </div>
+            </div>
+            <div class="col-span-7">
+                <div class="flex items-center">
+                    <span class="tech-label mr-2">ARGS</span>
+                    <input
+                      v-model="argsDraft[config.id]"
+                      placeholder="--flag --value"
+                      @input="markDirty(config.id)"
+                      class="input py-1 text-xs font-mono w-full"
+                    />
+                </div>
+            </div>
         </div>
         
-        <div class="service-config">
-          <label>Port</label>
-          <input v-model.number="config.ports.main" @input="markDirty(config.id)" />
-          <span class="hint" v-if="config.ports.main === 0">auto-assign</span>
-        </div>
-        
-        <div class="service-config">
-          <label>Args</label>
-          <input
-            v-model="argsDraft[config.id]"
-            placeholder="--flag --value"
-            @input="markDirty(config.id)"
-          />
-        </div>
-        
-        <div class="service-config">
-          <label>Env</label>
-          <div class="env-list">
-            <div v-for="(row, idx) in envDraft[config.id] || []" :key="idx" class="env-row">
-              <input v-model="row.key" placeholder="KEY" @input="markDirty(config.id)" />
+        <div class="mb-3">
+          <label class="tech-label">ENV_VARS</label>
+          <div class="space-y-1">
+            <div v-for="(row, idx) in envDraft[config.id] || []" :key="idx" class="grid grid-cols-2 gap-2">
+              <input v-model="row.key" placeholder="KEY" @input="markDirty(config.id)" class="input py-1 text-xs font-mono uppercase bg-white" />
               <input
                 v-model="row.value"
                 :type="isSensitiveKey(row.key) ? 'password' : 'text'"
                 placeholder="VALUE"
                 @input="markDirty(config.id)"
+                class="input py-1 text-xs font-mono bg-white"
               />
             </div>
-            <button class="ghost small" @click="addEnvRow(config.id)">Add Env</button>
+            <button class="btn btn-sm w-full border-dashed text-[10px] py-1 mt-1" @click="addEnvRow(config.id)">+ ENV</button>
           </div>
         </div>
         
-        <div class="service-config">
-          <label>Apply Without Restart</label>
-          <input type="checkbox" v-model="applyWithoutRestart[config.id]" />
+        <div class="grid grid-cols-4 gap-2 mt-4">
+          <button class="btn" @click="onSave(config)">Save</button>
+          <button class="btn btn-primary col-span-2" @click="onApply(config)">Apply & Restart</button>
+          <button class="btn" @click="emit('edit-config', config.id)">Raw Edit</button>
         </div>
-        
-        <div class="service-actions">
-          <button class="ghost" @click="onSave(config)">Save</button>
-          <button class="primary" @click="onApply(config)">Apply & Restart</button>
-          <button class="ghost" @click="emit('edit-config', config.id)">Edit Config</button>
-          <button class="ghost" @click="onReset(config.id)">Reset</button>
-          <span v-if="serviceDirty[config.id]" class="dirty">unsaved</span>
+        <div class="mt-2 text-right">
+             <button class="text-[9px] uppercase underline text-[var(--secondary-color)] hover:text-[var(--error-color)]" @click="onReset(config.id)">Reset Default</button>
         </div>
-        <hr class="separator"/>
       </div>
     </div>
     
-    <p v-if="serviceConfigError" class="error-inline">{{ serviceConfigError }}</p>
+    <p v-if="serviceConfigError" class="error mt-4 font-mono text-xs">{{ serviceConfigError }}</p>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.service-block {
-    margin-bottom: 24px;
-}
-
-.service-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-
-.status {
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 12px;
-}
-
-.status[data-state="running"] { color: #0b7a3e; }
-.status[data-state="starting"] { color: #c17b1b; }
-.status[data-state="stopped"] { color: #b23b3b; }
-
-.actions-inline {
-  margin-bottom: 12px;
-}
-
-.project-form {
-  display: grid;
-  gap: 6px;
-}
-
-.service-config {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 6px 0;
-}
-
-.service-config label {
-    min-width: 60px;
-    font-size: 13px;
-    padding-top: 6px;
-}
-
-.service-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 12px;
-}
-
-.separator {
-    border: 0;
-    border-bottom: 1px dashed #ccc;
-    margin-top: 24px;
-}
-
-input {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-.env-list {
-  display: grid;
-  gap: 6px;
-  flex: 1;
-}
-
-.env-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.service-json pre {
-  background: #f3f3f3;
-  border: 1px solid #d0d0d0;
-  padding: 8px;
-  overflow: auto;
-  max-height: 160px;
-  font-size: 12px;
-}
-
-.dirty {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: #c17b1b;
-  font-weight: bold;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.hint {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #6b6b6b;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button.small {
-    padding: 2px 6px;
-    font-size: 11px;
-}
-
-.primary { background: #ffd36a; }
-.ghost { background: #ffffff; }
+/* Scoped styles removed */
 </style>

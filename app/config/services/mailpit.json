@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "mailpit",
+  "enabled": true,
+  "version": null,
+  "ports": {
+    "main": 8025
+  },
+  "env": {},
+  "args": []
+}

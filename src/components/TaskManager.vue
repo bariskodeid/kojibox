@@ -60,106 +60,47 @@ async function stopTask() {
 </script>
 
 <template>
-  <section class="notice">
-    <h3>Task Manager (Node.js)</h3>
-    <div class="task-controls">
-        <select v-model="selectedProject">
-            <option value="" disabled>Select Project</option>
+  <section class="card">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">Task Runner</h3>
+        <span class="tech-label">NODE_PROC</span>
+    </div>
+
+    <div class="mb-4">
+        <select v-model="selectedProject" class="input font-mono uppercase text-xs">
+            <option value="" disabled>Select Target Project</option>
             <option v-for="p in projects" :key="p.id" :value="p.id">
-                {{ p.name }} ({{ p.stack }})
+                {{ p.name }} [{{ p.stack.toUpperCase() }}]
             </option>
         </select>
     </div>
     
-    <div v-if="selectedProject" class="scripts-list">
-        <div v-if="runningTasks.has(selectedProject)" class="running-indicator">
-            Task Running... 
-            <button class="secondary small" @click="stopTask">Stop</button>
+    <div v-if="selectedProject" class="border border-[var(--border-color)]">
+        <div v-if="runningTasks.has(selectedProject)" class="p-2 bg-[var(--accent-color)] text-white flex justify-between items-center">
+            <span class="font-mono font-bold text-xs animate-pulse">● TASK_ACTIVE</span>
+            <button class="bg-black text-white px-2 py-0.5 text-xs font-bold uppercase border border-white hover:bg-white hover:text-black transition-colors" @click="stopTask">ABORT</button>
         </div>
         
-        <div v-for="(cmd, name) in scripts" :key="name" class="script-row">
-            <strong>{{ name }}</strong>
-            <code class="cmd">{{ cmd }}</code>
-            <button class="ghost small" @click="runScript(name)" :disabled="runningTasks.has(selectedProject)">Run</button>
+        <div v-for="(cmd, name) in scripts" :key="name" class="flex items-center justify-between p-2 border-b border-[var(--border-color)] last:border-b-0 hover:bg-[var(--code-bg)]">
+            <div class="overflow-hidden mr-2">
+                <div class="font-bold text-xs uppercase">{{ name }}</div>
+                <div class="font-mono text-[10px] text-[var(--secondary-color)] truncate">{{ cmd }}</div>
+            </div>
+            <button class="btn px-2 py-1 text-[10px] h-6" @click="runScript(name)" :disabled="runningTasks.has(selectedProject)">RUN</button>
         </div>
         
-        <p v-if="Object.keys(scripts).length === 0 && !errorMsg">No scripts found in package.json</p>
+        <div v-if="Object.keys(scripts).length === 0 && !errorMsg" class="p-4 text-center text-xs font-mono text-[var(--secondary-color)]">
+            // NO SCRIPTS FOUND
+        </div>
+    </div>
+    <div v-else class="p-8 text-center text-xs font-mono text-[var(--secondary-color)] border border-dashed border-[var(--border-color)]">
+        SELECT PROJECT TO LOAD SCRIPTS
     </div>
     
-    <p v-if="errorMsg" class="error-inline">{{ errorMsg }}</p>
+    <p v-if="errorMsg" class="error mt-4 text-xs font-mono">{{ errorMsg }}</p>
   </section>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.task-controls {
-    margin-bottom: 12px;
-}
-
-select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-  width: 100%;
-}
-
-.script-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px;
-    background: #fff;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-}
-
-.cmd {
-    font-family: monospace;
-    color: #666;
-    margin: 0 8px;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-button.small {
-    padding: 2px 8px;
-    font-size: 11px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 4px 8px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ghost { background: #ffffff; }
-.secondary { background: #c7e5ff; }
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.running-indicator {
-    padding: 8px;
-    background: #e6fffa;
-    border: 1px solid #38b2ac;
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: bold;
-    font-size: 13px;
-}
+/* Scoped styles removed */
 </style>

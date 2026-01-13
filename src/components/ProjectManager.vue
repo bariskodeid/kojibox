@@ -121,60 +121,69 @@ function onDelete(id: string) {
 </script>
 
 <template>
-  <section class="notice">
-    <h3>Projects</h3>
-    <div class="project-form">
-      <input v-model="newProject.id" placeholder="id" :disabled="isEditingProject" />
-      <input v-model="newProject.name" placeholder="name" />
-      <input v-model="newProject.path" placeholder="path" />
-      <input v-model="newProject.domain" placeholder="domain" />
-      <input v-model.number="newProject.schemaVersion" disabled title="Schema Version" />
-      <select v-model="newProject.stack">
-        <option value="php">php</option>
-        <option value="node">node</option>
-      </select>
-      
-      <div class="project-overrides">
-        <label>Overrides</label>
-        <div class="env-list">
-          <div v-for="(row, idx) in projectOverridesDraft" :key="idx" class="env-row">
-            <input v-model="row.key" placeholder="KEY" />
-            <input
-              v-model="row.value"
-              :type="isSensitiveKey(row.key) ? 'password' : 'text'"
-              placeholder="VALUE"
-            />
-          </div>
-          <button
-            class="ghost"
-            type="button"
-            @click="projectOverridesDraft.push({ key: '', value: '' })"
-          >
-            Add Override
-          </button>
+  <section class="card">
+    <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-black uppercase">Project Registry</h3>
+        <span class="tech-label">Workspace</span>
+    </div>
+
+    <div class="border-2 border-[var(--border-color)] p-4 mb-6 bg-[var(--code-bg)]">
+      <h4 class="font-bold uppercase text-xs mb-3 border-b border-[var(--border-color)] pb-1">
+          {{ isEditingProject ? 'Edit Configuration' : 'Register New Project' }}
+      </h4>
+      <div class="grid grid-cols-1 gap-3">
+        <div class="grid grid-cols-2 gap-3">
+            <input v-model="newProject.id" class="input font-mono uppercase" placeholder="PROJECT_ID" :disabled="isEditingProject" />
+            <input v-model="newProject.name" class="input" placeholder="Display Name" />
         </div>
-      </div>
-      
-      <div class="actions">
-        <button class="ghost" @click="onSave">Save Project</button>
-        <button v-if="isEditingProject" class="ghost" @click="resetProjectForm">
-          Cancel Edit
-        </button>
+        <input v-model="newProject.path" class="input font-mono text-xs" placeholder="/absolute/path/to/project" />
+        <div class="grid grid-cols-2 gap-3">
+            <input v-model="newProject.domain" class="input font-mono lowercase" placeholder="project.test" />
+            <select v-model="newProject.stack" class="input uppercase">
+                <option value="php">PHP Stack</option>
+                <option value="node">Node.js Stack</option>
+            </select>
+        </div>
+        
+        <div class="mt-2">
+          <label class="tech-label mb-1">ENV_OVERRIDES</label>
+          <div class="space-y-2">
+            <div v-for="(row, idx) in projectOverridesDraft" :key="idx" class="flex gap-2">
+              <input v-model="row.key" class="input font-mono text-xs uppercase" placeholder="KEY" />
+              <input
+                v-model="row.value"
+                :type="isSensitiveKey(row.key) ? 'password' : 'text'"
+                class="input font-mono text-xs"
+                placeholder="VALUE"
+              />
+            </div>
+            <button class="btn btn-sm w-full border-dashed" type="button" @click="projectOverridesDraft.push({ key: '', value: '' })">
+              + Add Variable
+            </button>
+          </div>
+        </div>
+        
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-primary flex-1" @click="onSave">{{ isEditingProject ? 'Update' : 'Register' }}</button>
+          <button v-if="isEditingProject" class="btn flex-1" @click="resetProjectForm">Cancel</button>
+        </div>
       </div>
     </div>
     
-    <p v-if="projectError" class="error-inline">{{ projectError }}</p>
+    <p v-if="projectError" class="error mb-4 font-mono text-xs">{{ projectError }}</p>
     
-    <ul class="project-list">
-      <li v-for="project in projects" :key="project.id">
-        <strong>{{ project.name }}</strong> ({{ project.stack }}) - {{ project.domain }}
-        <span class="hint" v-if="Object.keys(project.overrides || {}).length">
-          overrides {{ Object.keys(project.overrides || {}).length }}
-        </span>
-        <span class="hint">v{{ project.schemaVersion }}</span>
-        <div class="list-actions">
-           <button class="ghost small" @click="editProject(project)">Edit</button>
-           <button class="ghost small" @click="onDelete(project.id)">Delete</button>
+    <ul class="space-y-2">
+      <li v-for="project in projects" :key="project.id" class="flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--card-bg)] hover:shadow-md transition-all">
+        <div>
+            <div class="flex items-center gap-2">
+                <strong class="uppercase text-sm">{{ project.name }}</strong>
+                <span class="badge bg-[var(--code-bg)]">{{ project.stack }}</span>
+            </div>
+            <div class="font-mono text-xs text-[var(--secondary-color)]">{{ project.domain }}</div>
+        </div>
+        <div class="flex gap-2">
+           <button class="btn px-2 py-1 text-[10px]" @click="editProject(project)">EDIT</button>
+           <button class="btn px-2 py-1 text-[10px] border-[var(--error-color)] text-[var(--error-color)]" @click="onDelete(project.id)">DEL</button>
         </div>
       </li>
     </ul>
@@ -182,98 +191,5 @@ function onDelete(id: string) {
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.project-form {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-input, select {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-.project-overrides {
-  margin-top: 8px;
-  border: 1px dashed #ccc;
-  padding: 8px;
-}
-
-.project-overrides label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-}
-
-.env-list {
-  display: grid;
-  gap: 6px;
-}
-
-.env-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-  margin-top: 8px;
-}
-
-.project-list {
-  margin: 16px 0 0;
-  padding-left: 16px;
-}
-
-.project-list li {
-    margin-bottom: 8px;
-}
-
-.hint {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #6b6b6b;
-  margin-left: 8px;
-}
-
-.actions {
-    margin-top: 8px;
-    display: flex;
-    gap: 8px;
-}
-
-.list-actions {
-    display: inline-flex;
-    gap: 4px;
-    margin-left: 8px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button.small {
-    padding: 2px 6px;
-    font-size: 11px;
-}
-
-.ghost {
-  background: #ffffff;
-}
+/* Scoped styles removed */
 </style>

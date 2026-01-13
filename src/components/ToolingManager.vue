@@ -83,163 +83,126 @@ function onGenerateCert() {
 </script>
 
 <template>
-  <div>
+  <div class="space-y-6">
     <!-- Domains Section -->
-    <section class="notice">
-      <h3>Domains</h3>
-      <div class="project-form">
-        <input v-model="newDomain.domain" placeholder="domain (app.test)" />
-        <input v-model="newDomain.projectId" placeholder="project id" />
-        <input v-model.number="newDomain.targetPort" type="number" placeholder="port" />
-        <div class="actions">
-            <button class="ghost" @click="onSaveDomain">Save Mapping</button>
-            <button class="ghost" @click="emit('apply-hosts')">Apply Hosts</button>
-            <button class="ghost" @click="emit('rollback-hosts')">Rollback Hosts</button>
+    <section class="card">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">Domain Routing</h3>
+          <span class="tech-label">VHOSTS</span>
+      </div>
+
+      <div class="border-2 border-[var(--border-color)] p-3 mb-4 bg-[var(--code-bg)]">
+        <div class="grid grid-cols-12 gap-2 mb-2">
+            <div class="col-span-5">
+                <input v-model="newDomain.domain" placeholder="domain.test" class="input font-mono text-xs" />
+            </div>
+            <div class="col-span-4">
+                <input v-model="newDomain.projectId" placeholder="project_id" class="input font-mono text-xs uppercase" />
+            </div>
+            <div class="col-span-3">
+                <input v-model.number="newDomain.targetPort" type="number" placeholder="8000" class="input font-mono text-xs" />
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+            <button class="btn btn-primary" @click="onSaveDomain">ADD ROUTE</button>
+            <button class="btn" @click="emit('apply-hosts')">SYNC HOSTS</button>
+            <button class="btn" @click="emit('rollback-hosts')">ROLLBACK</button>
         </div>
       </div>
-      <ul class="list">
-        <li v-for="mapping in domains" :key="mapping.domain">
-          <strong>{{ mapping.domain }}</strong> -> {{ mapping.projectId }} :{{ mapping.targetPort }}
-          <button class="ghost small" @click="emit('delete-domain', mapping.domain)">Delete</button>
+
+      <ul class="space-y-1">
+        <li v-for="mapping in domains" :key="mapping.domain" class="flex items-center justify-between p-2 border-b border-[var(--border-color)] text-xs font-mono hover:bg-[var(--code-bg)]">
+          <div>
+              <span class="font-bold text-[var(--accent-color)]">{{ mapping.domain }}</span>
+              <span class="text-[var(--secondary-color)] mx-2">-></span>
+              <span>{{ mapping.projectId }} :{{ mapping.targetPort }}</span>
+          </div>
+          <button class="text-[var(--error-color)] font-bold hover:underline" @click="emit('delete-domain', mapping.domain)">DEL</button>
         </li>
       </ul>
     </section>
 
     <!-- Proxy Rules Section -->
-    <section class="notice">
-      <h3>Proxy Rules</h3>
-      <div class="project-form">
-        <input v-model="newRule.host" placeholder="host (app.test)" />
-        <input v-model="newRule.path" placeholder="/path" />
-        <input v-model="newRule.target" placeholder="http://127.0.0.1:3000" />
-        <label class="inline">
-          <input type="checkbox" v-model="newRule.tls" />
-          tls
-        </label>
-        <div class="actions">
-             <button class="ghost" @click="onSaveProxy">Add Rule</button>
-             <button class="ghost" @click="emit('apply-proxy')">Apply Rules</button>
+    <section class="card">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">Reverse Proxy</h3>
+          <span class="tech-label">INGRESS</span>
+      </div>
+
+      <div class="border-2 border-[var(--border-color)] p-3 mb-4 bg-[var(--code-bg)]">
+        <div class="grid grid-cols-1 gap-2 mb-2">
+            <div class="grid grid-cols-2 gap-2">
+                <input v-model="newRule.host" placeholder="host" class="input font-mono text-xs" />
+                <input v-model="newRule.path" placeholder="/path" class="input font-mono text-xs" />
+            </div>
+            <div class="flex gap-2">
+                <input v-model="newRule.target" placeholder="http://target:port" class="input font-mono text-xs flex-1" />
+                <label class="flex items-center gap-1 border-2 border-[var(--border-color)] px-2 bg-white">
+                  <input type="checkbox" v-model="newRule.tls" class="w-3 h-3" />
+                  <span class="text-[10px] font-bold">TLS</span>
+                </label>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+             <button class="btn btn-primary" @click="onSaveProxy">ADD RULE</button>
+             <button class="btn" @click="emit('apply-proxy')">APPLY CONFIG</button>
         </div>
       </div>
-      <ul class="list">
-        <li v-for="(rule, index) in proxyRules" :key="index">
-          <strong>{{ rule.host }}</strong>{{ rule.path }} -> {{ rule.target }}
-          <span class="hint" v-if="rule.tls">tls</span>
-          <button class="ghost small" @click="emit('delete-proxy', index)">Delete</button>
+
+      <ul class="space-y-1">
+        <li v-for="(rule, index) in proxyRules" :key="index" class="flex items-center justify-between p-2 border-b border-[var(--border-color)] text-xs font-mono hover:bg-[var(--code-bg)]">
+          <div class="truncate mr-2">
+            <span class="font-bold">{{ rule.host }}</span>{{ rule.path }}
+            <span class="text-[var(--secondary-color)]">-></span> {{ rule.target }}
+            <span v-if="rule.tls" class="ml-2 badge bg-[var(--accent-color)] text-white border-transparent">TLS</span>
+          </div>
+          <button class="text-[var(--error-color)] font-bold hover:underline" @click="emit('delete-proxy', index)">DEL</button>
         </li>
       </ul>
     </section>
 
     <!-- Certs Section -->
-    <section class="notice">
-      <h3>Certificates</h3>
-      <div class="project-form">
-        <input v-model="certDomainsInput" placeholder="domains (a.test,b.test)" />
-        <button class="ghost" @click="onGenerateCert">Generate</button>
+    <section class="card">
+      <div class="border-b-2 border-[var(--border-color)] pb-2 mb-4 flex justify-between items-center">
+          <h3 class="text-lg font-black uppercase">TLS Certificates</h3>
+          <span class="tech-label">MKCERT</span>
       </div>
-      <ul class="list">
-        <li v-for="cert in certs" :key="cert.path">
-          <strong>{{ cert.name }}</strong> (exp {{ cert.expiresAt }})
-          <div class="cert-actions">
-            <button class="ghost small" @click="emit('trust-cert', cert.path, false, false)">Instructions</button>
-            <button class="ghost small" @click="emit('trust-cert', cert.path, true, false)">OS Command</button>
-            <button class="ghost small" @click="emit('trust-cert', cert.path, true, true)">Apply Now</button>
+
+      <div class="flex gap-2 mb-4">
+        <input v-model="certDomainsInput" placeholder="domains (comma separated)" class="input font-mono text-xs" />
+        <button class="btn" @click="onGenerateCert">GENERATE</button>
+      </div>
+
+      <ul class="space-y-2">
+        <li v-for="cert in certs" :key="cert.path" class="border border-[var(--border-color)] p-2 bg-[var(--code-bg)]">
+          <div class="flex justify-between items-center mb-2">
+              <strong class="text-xs font-mono">{{ cert.name }}</strong>
+              <span class="text-[9px] text-[var(--secondary-color)]">EXP: {{ cert.expiresAt }}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1">
+            <button class="btn btn-sm px-1 py-0.5 text-[9px]" @click="emit('trust-cert', cert.path, false, false)">INFO</button>
+            <button class="btn btn-sm px-1 py-0.5 text-[9px]" @click="emit('trust-cert', cert.path, true, false)">CMD</button>
+            <button class="btn btn-sm px-1 py-0.5 text-[9px] border-[var(--success-color)] text-[var(--success-color)]" @click="emit('trust-cert', cert.path, true, true)">TRUST</button>
           </div>
         </li>
       </ul>
-      <div v-if="trustResult" class="notice sub-notice">
-        <p><strong>Command:</strong> {{ trustResult.command }}</p>
-        <p v-if="trustResult.notes.length">
-          <strong>Notes:</strong> {{ trustResult.notes.join(' ') }}
-        </p>
-        <p v-if="trustResult.error" class="error-inline">{{ trustResult.error }}</p>
-        <p v-if="trustResult.applied">Applied successfully.</p>
+      
+      <div v-if="trustResult" class="mt-4 p-2 border border-[var(--border-color)] bg-[var(--card-bg)] shadow-md">
+        <div class="font-bold text-xs uppercase mb-1 border-b border-[var(--border-color)] pb-1">Command Output</div>
+        <pre class="text-[10px] font-mono whitespace-pre-wrap text-[var(--secondary-color)] bg-[var(--code-bg)] p-2 mb-2 select-all">{{ trustResult.command }}</pre>
+        <ul v-if="trustResult.notes.length" class="text-[10px] list-disc pl-4 mb-2">
+            <li v-for="n in trustResult.notes" :key="n">{{ n }}</li>
+        </ul>
+        <p v-if="trustResult.error" class="text-[var(--error-color)] text-xs font-bold">{{ trustResult.error }}</p>
+        <p v-if="trustResult.applied" class="text-[var(--success-color)] text-xs font-bold">SUCCESS: Certificate added to trust store.</p>
       </div>
     </section>
     
-    <p v-if="toolingError" class="error-inline">{{ toolingError }}</p>
+    <p v-if="toolingError" class="error mt-4 font-mono text-xs">{{ toolingError }}</p>
 
   </div>
 </template>
 
 <style scoped>
-.notice {
-  background: #e8f4e8;
-  border: 1px solid #6fb56f;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.sub-notice {
-    margin-top: 12px;
-    background: #fff;
-    border: 1px dashed #6fb56f;
-}
-
-.project-form {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.list {
-  margin: 16px 0 0;
-  padding-left: 16px;
-}
-
-.list li {
-    margin-bottom: 8px;
-}
-
-.actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.cert-actions {
-    display: inline-flex;
-    gap: 4px;
-    margin-left: 8px;
-}
-
-input {
-  border: 2px solid #1b1b1b;
-  padding: 6px 10px;
-}
-
-button {
-  border: 2px solid #1b1b1b;
-  background: #fefefe;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button.small {
-    padding: 2px 6px;
-    font-size: 11px;
-}
-
-.ghost { background: #ffffff; }
-
-.error-inline {
-  background: #ffe2e2;
-  border: 1px solid #d96a6a;
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.hint {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #6b6b6b;
-  margin-left: 8px;
-}
+/* Scoped styles removed */
 </style>
